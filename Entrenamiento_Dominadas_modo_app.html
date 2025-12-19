@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Entrenamiento Dominadas (modo app)</title>
+  <style>
+    :root{font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
+    body{margin:0;background:#0b0d12;color:#e9ecf1;}
+    header{position:sticky;top:0;background:linear-gradient(180deg,#0b0d12 0%, rgba(11,13,18,.86) 100%);
+      backdrop-filter: blur(10px); padding:14px 14px 10px;border-bottom:1px solid rgba(255,255,255,.08); z-index:10;}
+    h1{margin:0;font-size:16px;font-weight:700;letter-spacing:.2px}
+    .sub{margin:6px 0 0;font-size:12px;opacity:.78}
+    main{padding:14px;max-width:880px;margin:0 auto}
+    .card{background:#121625;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:14px;box-shadow: 0 12px 30px rgba(0,0,0,.25); margin-bottom:12px;}
+    label{font-size:12px;opacity:.9;display:block;margin-bottom:6px}
+    select,button,input,textarea{width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:#0e1220;color:#e9ecf1;padding:12px 12px;font-size:14px;outline:none}
+    select{appearance:none}
+    .row{display:grid;grid-template-columns:1fr;gap:10px}
+    @media (min-width:720px){.row{grid-template-columns:1fr 1fr}}
+    button{cursor:pointer;font-weight:700}
+    button.primary{background:#2a6df6;border-color:#2a6df6}
+    button.ghost{background:transparent}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.08); font-size:12px; opacity:.92}
+    .stepTitle{font-size:18px;font-weight:800;margin:0 0 6px}
+    .meta{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 10px}
+    .desc{margin:0;line-height:1.45;opacity:.92}
+    .controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    .controls3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+    .progress{height:10px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden}
+    .bar{height:100%;background:#2a6df6;width:0%}
+    .tiny{font-size:12px;opacity:.75}
+    .check{display:flex;gap:10px;align-items:flex-start}
+    .check input{width:18px;height:18px;margin-top:2px}
+    textarea{min-height:84px;resize:vertical}
+    .timer{font-variant-numeric: tabular-nums; font-weight:900; font-size:24px; letter-spacing:.6px}
+    .footer{opacity:.65;font-size:12px;margin-top:10px}
+    .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size:12px;padding:2px 6px;border-radius:8px;border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06)}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Entrenamiento Dominadas · modo app</h1>
+  <div class="sub">Sin leer párrafos: un ejercicio por pantalla + descansos + notas (se guarda en tu móvil).</div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Fase</label>
+        <select id="phase"></select>
+      </div>
+      <div>
+        <label>Día</label>
+        <select id="day"></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Modo</label>
+        <select id="mode">
+          <option value="follow">Seguir paso a paso</option>
+          <option value="list">Ver lista completa</option>
+        </select>
+      </div>
+      <div>
+        <label>Descanso rápido (si no está indicado)</label>
+        <select id="defaultRest">
+          <option value="30">30"</option>
+          <option value="45">45"</option>
+          <option value="60" selected>1'</option>
+          <option value="90">1'30"</option>
+          <option value="120">2'</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="controls3">
+      <button class="primary" id="startBtn">Empezar / Reanudar</button>
+      <button class="ghost" id="resetBtn">Reiniciar día</button>
+      <button class="ghost" id="installBtn" title="En Android/Chrome: menú ⋮ → 'Añadir a pantalla de inicio'">Añadir como app</button>
+    </div>
+
+    <div class="footer">
+      Tip: en la pantalla de ejercicio usa <span class="kbd">Siguiente</span> y <span class="kbd">Descanso</span>. Si quieres vibración, activa el sonido/vibración del móvil.
+    </div>
+  </div>
+
+  <div id="followView" class="card" style="display:none">
+    <div class="progress"><div class="bar" id="bar"></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <div class="tiny" id="where"></div>
+      <div class="tiny" id="count"></div>
+    </div>
+
+    <h2 class="stepTitle" id="title"></h2>
+    <div class="meta" id="meta"></div>
+    <p class="desc" id="desc"></p>
+
+    <div style="margin-top:12px" class="check">
+      <input type="checkbox" id="doneChk" />
+      <div>
+        <div style="font-weight:700">Marcar como hecho</div>
+        <div class="tiny">Se guarda para este día.</div>
+      </div>
+    </div>
+
+    <label style="margin-top:12px">Notas rápidas</label>
+    <textarea id="notes" placeholder="Carga usada, sensaciones, técnica…"></textarea>
+
+    <div class="card" style="margin-top:12px;background:#0e1220">
+      <label>Temporizador de descanso</label>
+      <div class="timer" id="timer">00:00</div>
+      <div class="controls3">
+        <button id="restBtn">Descanso</button>
+        <button id="pauseBtn">Pausar</button>
+        <button id="skipBtn">Siguiente</button>
+      </div>
+      <div class="tiny" id="timerHint"></div>
+    </div>
+  </div>
+
+  <div id="listView" class="card" style="display:none">
+    <h2 style="margin:0 0 10px;font-size:16px">Lista del día</h2>
+    <div id="list"></div>
+  </div>
+</main>
+
+<script>
+const DATA = {
+  "Parte 1 (10/10–24/10)": {
+    note: "En esta fase NO se realizan series de dominadas; se fortalece la base (manos/antebrazo + tren superior).",
+    days: {
+      "Sesión única": [
+        { t:"Rodaje suave", meta:"20–30 min", d:"A ser posible en calle, evitando asfalto." },
+        { t:"Colgado + descanso (manos/antebrazo)", meta:"3 series · 4 rondas · 45\" tras 4 rondas", d:"Cada ronda: colgado con brazos estirados 15\" + descanso 15\"." , rest:45},
+        { t:"Rodillo antebrazo", meta:"3 series · al fallo · descanso 1'", d:"Brazos a 90º y codos pegados al cuerpo. Control de la posición.", rest:60 },
+        { t:"Mancuerna: dejar rodar en dedos", meta:"3 series · descanso 1'", d:"Palma hacia arriba; 3–5 kg. Desde muñeca flexionada hacia ti, deja rodar abriendo mano hasta última falange.", rest:60 },
+
+        { t:"Barra al pecho (dorsal)", meta:"3×12 · descanso 1'", d:"Controla la velocidad; aguanta la subida y sé explosivo en la bajada sin perder técnica.", rest:60 },
+        { t:"Press banca en máquina (pectoral)", meta:"3×12 · descanso 1'", d:"Siempre en máquina (peso guiado). Explosivo en subida (sin exagerar) y aguanta bajada.", rest:60 },
+        { t:"Pull Over", meta:"3×12 · descanso 1'", d:"Espalda bien apoyada en banco. Movimiento controlado.", rest:60 },
+        { t:"Curl en polea con barra recta (bíceps)", meta:"3×12 · descanso 1'", d:"Codos juntos y pegados al cuerpo. Si se pierde técnica, baja el peso.", rest:60 },
+        { t:"Extensiones en polea con cuerda (tríceps)", meta:"3×12 · descanso 1'", d:"Codos juntos y brazos pegados al cuerpo.", rest:60 },
+
+        { t:"Cuerdas (simulación subida)", meta:"6×8 cada brazo", d:"Sentado en el suelo con banco plano cruzado delante; pies sobre banco. Empieza con una mano, lánzala contraria lo más alto posible.", rest:60 },
+        { t:"Abdomen inferiores", meta:"3×25 · descanso 30\"", d:"Rodillas flexionadas 45º. Eleva piernas sin variar flexión. No apoyar pies al bajar. Si molestan lumbares: manos bajo glúteos.", rest:30 },
+        { t:"Oblicuos", meta:"3×25 por lado · descanso 30\"", d:"Tren inferior quieto. Rota cintura, tronco y brazos a la vez (90º). Codo hacia rodilla elevada.", rest:30 },
+        { t:"Abdomen superiores", meta:"4×25 (rápidas)", d:"Manos cruzadas en pecho (palmas en hombros). Cabeza recta mirando al techo. Movimiento corto y rápido. Suelta aire al subir." }
+      ]
+    }
+  },
+
+  "Parte 2 (24/10–7/11)": {
+    note: "2 días distintos, repetir 2 veces/semana. 1 día/semana: test de máximas dominadas al llegar (tras calentar).",
+    days: {
+      "Día 1": [
+        { t:"Rodaje suave", meta:"20–30 min", d:"A ser posible en calle, evitando asfalto." },
+        { t:"Colgado + descanso (manos/antebrazo)", meta:"3 series · 4 rondas · 30\" tras 4 rondas", d:"Cada ronda: colgado con brazos estirados 25\" + descanso 15\".", rest:30},
+        { t:"Rodillo antebrazo", meta:"3 series · al fallo · descanso 45\"", d:"Brazos a 90º y codos pegados al cuerpo. Control de la posición.", rest:45 },
+        { t:"Elevación de muñeca en banco", meta:"3 series palmas arriba + 3 palmas abajo · 15 reps", d:"Con mancuernas. Control y rango cómodo.", rest:60 },
+
+        { t:"Dominadas completas (10 series)", meta:"Descanso 60–90\"", d:"Completas y estrictas, usando el mínimo esfuerzo posible en la bajada. Reps por serie: 10–9–8–8–7–6–6–5–4–4.", rest:75 },
+        { t:"Press banca con mancuernas (6 series)", meta:"Descanso 1'", d:"Reps: 12–10–8–8–6–6. Sube peso cuando bajan reps; con ese peso no podrías hacer +2 reps.", rest:60 },
+        { t:"Círculos de pecho con mancuernas", meta:"3×12 · descanso 1'", d:"Bien apoyado en banco, movimiento controlado.", rest:60 },
+        { t:"Dominadas con cuerda", meta:"3 series al fallo · descanso 1'", d:"Agarras cuerda y haces dominadas elevándote sobre ella. Alterna el brazo que va arriba.", rest:60 },
+
+        { t:"Abdomen isométricos", meta:"2×40\"", d:"Plancha/isométrico (según tu variante habitual).", rest:30 },
+        { t:"Abdomen inferiores", meta:"3×25 · descanso 30\"", d:"Rodillas 45º. Eleva piernas sin variar flexión. No apoyar pies al bajar. Si molestan lumbares: manos bajo glúteos.", rest:30 },
+        { t:"Oblicuos", meta:"3×25 por lado · descanso 30\"", d:"Tren inferior quieto. Rota cintura, tronco y brazos a la vez (90º). Codo hacia rodilla elevada.", rest:30 },
+        { t:"Abdomen superiores", meta:"4×25 (rápidas)", d:"Manos cruzadas en pecho, cabeza recta. Movimiento corto y rápido. Suelta aire al subir." }
+      ],
+
+      "Día 2": [
+        { t:"Rodaje suave", meta:"20–30 min", d:"A ser posible en calle, evitando asfalto." },
+        { t:"Colgado + descanso (manos/antebrazo)", meta:"3 series · 4 rondas · 30\" tras 4 rondas", d:"Cada ronda: colgado con brazos estirados 25\" + descanso 15\".", rest:30},
+        { t:"Rodillo antebrazo", meta:"3 series · al fallo · descanso 45\"", d:"Brazos a 90º y codos pegados al cuerpo. Control de la posición.", rest:45 },
+        { t:"Elevación de muñeca en banco", meta:"3 series palmas arriba + 3 palmas abajo · 15 reps", d:"Con mancuernas. Control y rango cómodo.", rest:60 },
+
+        { t:"Dominadas (90\" entre series): Subidas en 3 fases", meta:"3 series al fallo", d:"Con control por fases.", rest:90 },
+        { t:"Dominadas: Llegadas", meta:"3 series al fallo", d:"Trabajo específico de llegada.", rest:90 },
+        { t:"Dominadas: Bajadas en 3 fases", meta:"3 series al fallo", d:"Excéntrico por fases.", rest:90 },
+        { t:"Dominadas: Salidas", meta:"3 series al fallo", d:"Trabajo específico de salida.", rest:90 },
+        { t:"Dominadas isométricas", meta:"4 series al fallo", d:"Isometrías en puntos fuertes.", rest:90 },
+
+        { t:"Barra al pecho agarre inverso (dorsal)", meta:"3×12 · descanso 1'", d:"Controla la velocidad; aguanta subida y sé explosivo en bajada sin perder técnica.", rest:60 },
+        { t:"Curl alterno con mancuernas (bíceps)", meta:"3×12 · descanso 1'", d:"Giro de 90º de muñeca a la vez que subes. Rodillas ligeramente flexionadas. Si se pierde técnica, baja el peso.", rest:60 },
+        { t:"Fondos en banco (tríceps)", meta:"3×15 · descanso 1'", d:"Baja hasta 90º de flexión de codo.", rest:60 },
+
+        { t:"Abdomen isométricos", meta:"2×40\"", d:"Plancha/isométrico (según tu variante habitual).", rest:30 },
+        { t:"Abdomen inferiores", meta:"3×25 · descanso 30\"", d:"Rodillas 45º. Eleva piernas sin variar flexión. No apoyar pies al bajar. Si molestan lumbares: manos bajo glúteos.", rest:30 },
+        { t:"Oblicuos", meta:"3×25 por lado · descanso 30\"", d:"Tren inferior quieto. Rota cintura, tronco y brazos a la vez (90º). Codo hacia rodilla elevada.", rest:30 },
+        { t:"Abdomen superiores", meta:"4×25 (rápidas)", d:"Manos cruzadas en pecho, cabeza recta. Movimiento corto y rápido. Suelta aire al subir." }
+      ]
+    }
+  }
+};
+
+const els = {
+  phase: document.getElementById('phase'),
+  day: document.getElementById('day'),
+  mode: document.getElementById('mode'),
+  defaultRest: document.getElementById('defaultRest'),
+  startBtn: document.getElementById('startBtn'),
+  resetBtn: document.getElementById('resetBtn'),
+  installBtn: document.getElementById('installBtn'),
+  followView: document.getElementById('followView'),
+  listView: document.getElementById('listView'),
+  title: document.getElementById('title'),
+  meta: document.getElementById('meta'),
+  desc: document.getElementById('desc'),
+  where: document.getElementById('where'),
+  count: document.getElementById('count'),
+  bar: document.getElementById('bar'),
+  doneChk: document.getElementById('doneChk'),
+  notes: document.getElementById('notes'),
+  timer: document.getElementById('timer'),
+  timerHint: document.getElementById('timerHint'),
+  restBtn: document.getElementById('restBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  skipBtn: document.getElementById('skipBtn'),
+  list: document.getElementById('list')
+};
+
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredPrompt = e;
+});
+
+function key(){ return `domiapp:${els.phase.value}:${els.day.value}`; }
+function loadState(){
+  const raw = localStorage.getItem(key());
+  return raw ? JSON.parse(raw) : { idx:0, done:{}, notes:{} };
+}
+function saveState(state){ localStorage.setItem(key(), JSON.stringify(state)); }
+
+function fmt(sec){
+  sec = Math.max(0, sec|0);
+  const m = String(Math.floor(sec/60)).padStart(2,'0');
+  const s = String(sec%60).padStart(2,'0');
+  return `${m}:${s}`;
+}
+
+function phases(){
+  return Object.keys(DATA);
+}
+function daysForPhase(phase){
+  return Object.keys(DATA[phase].days);
+}
+
+function populate(){
+  els.phase.innerHTML = phases().map(p=>`<option value="${p}">${p}</option>`).join('');
+  const savedPhase = localStorage.getItem('domiapp:phase');
+  if(savedPhase && DATA[savedPhase]) els.phase.value = savedPhase;
+
+  refreshDays();
+
+  const savedMode = localStorage.getItem('domiapp:mode');
+  if(savedMode) els.mode.value = savedMode;
+
+  const savedDefaultRest = localStorage.getItem('domiapp:defaultRest');
+  if(savedDefaultRest) els.defaultRest.value = savedDefaultRest;
+
+  render();
+}
+
+function refreshDays(){
+  const d = daysForPhase(els.phase.value);
+  els.day.innerHTML = d.map(x=>`<option value="${x}">${x}</option>`).join('');
+  const savedDay = localStorage.getItem('domiapp:day');
+  if(savedDay && d.includes(savedDay)) els.day.value = savedDay;
+}
+
+function getSteps(){
+  return DATA[els.phase.value].days[els.day.value];
+}
+
+let timerId=null, remaining=0, paused=true;
+
+function stopTimer(){
+  if(timerId) clearInterval(timerId);
+  timerId=null;
+  remaining=0;
+  paused=true;
+  els.timer.textContent = "00:00";
+}
+
+function startTimer(seconds){
+  remaining = seconds|0;
+  paused=false;
+  els.timer.textContent = fmt(remaining);
+  els.timerHint.textContent = remaining ? "Cuando llegue a 0, te aviso (si el móvil permite sonido/vibración)." : "";
+  if(timerId) clearInterval(timerId);
+  timerId = setInterval(()=>{
+    if(paused) return;
+    remaining -= 1;
+    els.timer.textContent = fmt(remaining);
+    if(remaining<=0){
+      clearInterval(timerId);
+      timerId=null;
+      paused=true;
+      try{
+        navigator.vibrate && navigator.vibrate([120,80,120]);
+      }catch(_){}
+      try{
+        const ctx = new (window.AudioContext||window.webkitAudioContext)();
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = 880;
+        g.gain.value = 0.08;
+        o.start();
+        setTimeout(()=>{ o.stop(); ctx.close(); }, 180);
+      }catch(_){}
+    }
+  }, 1000);
+}
+
+function render(){
+  localStorage.setItem('domiapp:phase', els.phase.value);
+  localStorage.setItem('domiapp:day', els.day.value);
+  localStorage.setItem('domiapp:mode', els.mode.value);
+  localStorage.setItem('domiapp:defaultRest', els.defaultRest.value);
+
+  const steps = getSteps();
+  const state = loadState();
+
+  if(els.mode.value === 'list'){
+    els.followView.style.display='none';
+    els.listView.style.display='block';
+    stopTimer();
+    const intro = DATA[els.phase.value].note ? `<div class="pill" style="margin-bottom:10px">ℹ️ ${DATA[els.phase.value].note}</div>` : "";
+    els.list.innerHTML = intro + steps.map((s,i)=>{
+      const done = state.done[i] ? "checked" : "";
+      const n = (state.notes[i]||"").replace(/</g,"&lt;");
+      const meta = s.meta ? `<div class="tiny" style="margin-top:4px">${s.meta}</div>` : "";
+      const d = s.d ? `<div style="margin-top:6px;opacity:.9">${s.d}</div>` : "";
+      return `
+        <div class="card" style="margin:0 0 10px;background:#0e1220">
+          <div class="check">
+            <input type="checkbox" data-i="${i}" class="listDone" ${done}/>
+            <div style="width:100%">
+              <div style="font-weight:800">${i+1}. ${s.t}</div>
+              ${meta}
+              ${d}
+              <label style="margin-top:10px">Notas</label>
+              <textarea data-i="${i}" class="listNotes" placeholder="...">${n}</textarea>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+    document.querySelectorAll('.listDone').forEach(chk=>{
+      chk.addEventListener('change', (e)=>{
+        const i = e.target.getAttribute('data-i');
+        const st = loadState();
+        st.done[i] = e.target.checked;
+        saveState(st);
+      });
+    });
+    document.querySelectorAll('.listNotes').forEach(tx=>{
+      tx.addEventListener('input', (e)=>{
+        const i = e.target.getAttribute('data-i');
+        const st = loadState();
+        st.notes[i] = e.target.value;
+        saveState(st);
+      });
+    });
+    return;
+  }
+
+  els.followView.style.display='block';
+  els.listView.style.display='none';
+
+  const i = Math.max(0, Math.min(state.idx, steps.length-1));
+  const s = steps[i];
+
+  els.where.textContent = `${els.phase.value} · ${els.day.value}`;
+  els.count.textContent = `${i+1}/${steps.length}`;
+  els.bar.style.width = `${((i+1)/steps.length)*100}%`;
+
+  els.title.textContent = s.t;
+  els.meta.innerHTML = "";
+  const pills = [];
+  if(DATA[els.phase.value].note && i===0) pills.push(`ℹ️ ${DATA[els.phase.value].note}`);
+  if(s.meta) pills.push(`🏋️ ${s.meta}`);
+  if(s.rest) pills.push(`⏱️ Descanso sugerido: ${s.rest}s`);
+  pills.forEach(p=>{
+    const div = document.createElement('div');
+    div.className="pill";
+    div.textContent=p;
+    els.meta.appendChild(div);
+  });
+
+  els.desc.textContent = s.d || "";
+  els.doneChk.checked = !!state.done[i];
+  els.notes.value = state.notes[i] || "";
+}
+
+function setIdx(newIdx){
+  const steps = getSteps();
+  const st = loadState();
+  st.idx = Math.max(0, Math.min(newIdx, steps.length-1));
+  saveState(st);
+  render();
+}
+
+els.phase.addEventListener('change', ()=>{
+  refreshDays();
+  stopTimer();
+  render();
+});
+els.day.addEventListener('change', ()=>{ stopTimer(); render(); });
+els.mode.addEventListener('change', ()=> render());
+els.defaultRest.addEventListener('change', ()=> render());
+
+els.startBtn.addEventListener('click', ()=>{
+  const st = loadState();
+  if(st.idx==null) st.idx=0;
+  saveState(st);
+  render();
+});
+
+els.resetBtn.addEventListener('click', ()=>{
+  localStorage.removeItem(key());
+  stopTimer();
+  render();
+});
+
+els.installBtn.addEventListener('click', async ()=>{
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+  }else{
+    alert("En móvil: abre el menú del navegador y elige “Añadir a pantalla de inicio”.");
+  }
+});
+
+els.doneChk.addEventListener('change', ()=>{
+  const st = loadState();
+  st.done[st.idx] = els.doneChk.checked;
+  saveState(st);
+});
+
+els.notes.addEventListener('input', ()=>{
+  const st = loadState();
+  st.notes[st.idx] = els.notes.value;
+  saveState(st);
+});
+
+els.restBtn.addEventListener('click', ()=>{
+  const steps = getSteps();
+  const st = loadState();
+  const s = steps[st.idx];
+  const def = parseInt(els.defaultRest.value,10);
+  const seconds = (s.rest!=null) ? s.rest : def;
+  startTimer(seconds);
+});
+
+els.pauseBtn.addEventListener('click', ()=>{
+  if(!timerId) return;
+  paused = !paused;
+  els.pauseBtn.textContent = paused ? "Reanudar" : "Pausar";
+});
+
+els.skipBtn.addEventListener('click', ()=>{
+  stopTimer();
+  const st = loadState();
+  setIdx(st.idx + 1);
+});
+
+populate();
+</script>
+</body>
+</html>
