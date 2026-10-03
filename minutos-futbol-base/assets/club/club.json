@@ -1,0 +1,24 @@
+{
+  "name": "A.D. Benalmádena",
+  "fullName": "C.D. Asociación Deportiva Benalmádena",
+  "category": "Benjamín · 3ª Andaluza A",
+  "season": "2026/27",
+  "format": "F7",
+  "colors": {
+    "primary": "#EDC935",
+    "primaryText": "#0C1A3C",
+    "secondary": "#1178D7",
+    "secondaryText": "#FFFFFF",
+    "navy": "#0C1A3C",
+    "gold": "#D9A72A"
+  },
+  "kits": {
+    "first": { "label": "Primera (amarilla)", "shirt": "#EDC935", "accent": "#D39628" },
+    "second": { "label": "Segunda (azul)", "shirt": "#1178D7", "accent": "#0C1A3C" }
+  },
+  "crest": {
+    "circular": "./escudo-circular.png",
+    "circularSmall": "./escudo-circular-128.png",
+    "patch": "./escudo-parche.jpg"
+  }
+}
