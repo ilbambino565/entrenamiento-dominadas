@@ -1,36 +1,27 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { LiveMatchScreen, createDemoSession } from './src/features/live-match';
 
 /**
- * Pantalla de bienvenida provisional. El motor del partido y el panel de
- * cámara NO se montan aquí: las pantallas llegan en los hitos M3-M5
- * (docs/06-roadmap.md) y se compondrán con `createMatchSession`.
+ * Montaje provisional de la pantalla de partido con un equipo de prueba en
+ * memoria. La navegación (Expo Router) y SQLite llegan en hitos posteriores.
  */
 export default function App() {
+  // Una sola sesión por montaje: el estado inicial perezoso no se vuelve a crear.
+  const [demo] = useState(() => createDemoSession());
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Minutos Fútbol Base</Text>
-      <Text style={styles.note}>Fase de diseño: MVP en construcción</Text>
-      <StatusBar style="auto" />
-    </View>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <LiveMatchScreen session={demo.session} players={demo.players} />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  note: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
+  root: { flex: 1 },
 });

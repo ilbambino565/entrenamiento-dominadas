@@ -44,7 +44,7 @@ lluvia o cuando el arrastre falla.
 
 | # | Problema | Solución |
 |---|----------|----------|
-| 1 | **Conflicto con el scroll** del banquillo (deslizar ≠ arrastrar) | Activación por **pulsación corta (≈150 ms)** o por movimiento mayoritariamente vertical (`activeOffsetY`, `failOffsetX`). Con ≤ 9 suplentes se usan **dos filas sin scroll** |
+| 1 | **Conflicto con el scroll** del banquillo (deslizar ≠ arrastrar) | Con ≤ 9 suplentes se usan **dos filas sin scroll**, así que no hay conflicto y el arrastre se activa **por desplazamiento (≈ 8 dp, ver nº 12)**, nunca por pulsación previa: una pulsación quieta debe seguir siendo un toque (selección) y un tirón rápido debe arrastrar. Si algún día hubiera scroll: `activeOffsetY` / `failOffsetX` |
 | 2 | **Gesto "atrás" del sistema** al arrastrar desde el borde (iOS/Android) | Margen lateral en el campo; desactivar el gesto atrás en la pantalla de partido |
 | 3 | **Soltar sobre el jugador equivocado** cuando hay fichas juntas | Imán con resaltado previo; colisión suave que separa fichas solapadas al soltar; tamaño de ficha ≥ 56 dp |
 | 4 | **Sustitución accidental** | DESHACER siempre visible con descripción de lo que deshace; háptica distinta para cambio y movimiento |
