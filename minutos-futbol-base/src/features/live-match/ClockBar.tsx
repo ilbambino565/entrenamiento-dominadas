@@ -4,6 +4,7 @@ import type { MatchEngine } from '../../app-services/matchEngine';
 import { formatClock, periodClockMs, type LineupEntry, type MatchState } from '../../core';
 import { TABULAR, useTheme } from '../../ui/theme';
 import type { PlayerInfo } from './demoTeam';
+import { applyFormation, changedPositions, formationsFor } from './formations';
 import { guarded, type Notify } from './guard';
 import { UndoButton } from './UndoButton';
 
@@ -100,6 +101,30 @@ export function ClockBar({ engine, state, now, players, rival, notify, onOpenSum
     if (await guarded(() => engine.end(suspending ? 'SUSPENDED' : 'NORMAL'), notify, 'el final')) onOpenSummary();
   };
 
+  // Dibujos: antes del pitido se reescribe la alineación (un solo evento, un
+  // solo DESHACER); con el partido en marcha cada ficha que cambia de sitio es
+  // un MOVE (sin efecto en los minutos).
+  const formations = state.status === 'FINISHED' ? [] : formationsFor(state.config.playersOnField);
+  const preMatch = state.status === 'DRAFT' || state.status === 'READY';
+  const applyPreset = (formation: string) => {
+    setMenuOpen(false);
+    const entries = applyFormation(state, formation);
+    if (preMatch) {
+      const bench = Object.values(state.players)
+        .filter((p) => p.location === 'BENCH')
+        .map((p) => p.playerId);
+      void guarded(() => engine.setLineup(entries, bench), notify, `el dibujo ${formation}`);
+      return;
+    }
+    void guarded(
+      async () => {
+        for (const e of changedPositions(state, entries)) await engine.movePlayer(e.playerId, e.position);
+      },
+      notify,
+      `el dibujo ${formation}`,
+    );
+  };
+
   const holdButton = (label: string, onHold: () => void, testID: string) => (
     <Pressable
       onPress={() => setHint(true)}
@@ -168,11 +193,33 @@ export function ClockBar({ engine, state, now, players, rival, notify, onOpenSum
         <View style={styles.menuRow}>
           {canHalftime ? holdButton('DESCANSO', halftime, 'halftime-button') : null}
           {canEnd ? holdButton(suspending ? 'SUSPENDER' : 'FINALIZAR', () => void end(), 'end-button') : null}
-          {!canHalftime && !canEnd ? <Text style={{ color: colors.textMuted }}>Sin acciones en este estado</Text> : null}
+          {!canHalftime && !canEnd && formations.length === 0 ? (
+            <Text style={{ color: colors.textMuted }}>Sin acciones en este estado</Text>
+          ) : null}
           {hint && (canHalftime || canEnd) ? (
             <Text style={[styles.hint, { color: colors.textMuted }]} testID="hold-hint">
               mantén pulsado
             </Text>
+          ) : null}
+          {formations.length > 0 ? (
+            <View style={styles.formations} testID="formations">
+              <Text style={[styles.formationsLabel, { color: colors.textMuted }]}>DIBUJO</Text>
+              {formations.map((formation) => (
+                <Pressable
+                  key={formation}
+                  onPress={() => applyPreset(formation)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Dibujo ${formation}`}
+                  testID={`formation-${formation}`}
+                  style={({ pressed }) => [
+                    styles.formationChip,
+                    { borderColor: colors.accent, backgroundColor: pressed ? colors.accent : colors.surface },
+                  ]}
+                >
+                  <Text style={[styles.formationText, TABULAR, { color: colors.text }]}>{formation}</Text>
+                </Pressable>
+              ))}
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -198,4 +245,8 @@ const styles = StyleSheet.create({
   holdButton: { flexGrow: 1, borderWidth: 2, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   holdText: { fontSize: 17, fontWeight: '800', letterSpacing: 1 },
   hint: { width: '100%', fontSize: 13, textAlign: 'center' },
+  formations: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  formationsLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1, marginRight: 4 },
+  formationChip: { minHeight: 44, minWidth: 64, paddingHorizontal: 12, borderWidth: 2, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  formationText: { fontSize: 16, fontWeight: '800' },
 });

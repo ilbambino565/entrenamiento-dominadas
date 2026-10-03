@@ -13,7 +13,7 @@ export const DEMO_CONFIG: MatchConfig = {
   squad: DEMO_SQUAD,
 };
 
-/** 1-2-3-1 con el portero abajo (y crece hacia la portería propia). */
+/** 2-3-1 con el portero abajo (y crece hacia la portería propia). */
 export const DEMO_LINEUP: readonly LineupEntry[] = [
   { playerId: 'marco', position: { x: 0.5, y: 0.9 }, goalkeeper: true },
   { playerId: 'daniel', position: { x: 0.3, y: 0.68 } },

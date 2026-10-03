@@ -268,8 +268,10 @@ Estados visuales:
   tiempos se quedan congelados y los cambios siguen permitidos.
 - **Arrastrando:** destino resaltado, banquillo iluminado y el resto atenuado al 60 %.
 
-Menú `⋯` (lo menos usado): Descanso · Finalizar · Suspender · Marcar lesionado ·
-Ajustar reloj.
+Menú `⋯` (lo menos usado): Descanso · Finalizar · Suspender · **Dibujo**
+(2-3-1, 3-2-1, 3-1-2, 2-2-2, 1-3-2, 2-1-3: recoloca a los que están en el
+campo; antes del pitido reescribe la alineación en un solo evento, durante el
+partido mueve fichas) · Marcar lesionado · Ajustar reloj.
 
 ### P9 — Resumen del partido
 
