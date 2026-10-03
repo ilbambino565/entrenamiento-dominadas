@@ -3,12 +3,15 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@expo/metro-runtime": "~57.0.16",
     "expo": "~57.0.26",
     "expo-asset": "~57.0.18",
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-web": "^0.21.2",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -29,7 +32,8 @@
     "typecheck": "tsc --noEmit",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "verify": "npm run typecheck && npm run check:boundaries && npm test -- --silent",
-    "test:props": "PROPERTY_RUNS=2000 jest src/core/__tests__/properties.test.ts"
+    "test:props": "PROPERTY_RUNS=2000 jest src/core/__tests__/properties.test.ts",
+    "web": "expo start --web"
   },
   "private": true
 }

@@ -219,8 +219,9 @@ de balón o jugadores, almacenamiento o edición de vídeo. Ninguna de esas piez
 requiere cambiar `core`, `db` ni `app-services`: entran como una nueva
 implementación de `CameraController` y, en su momento, una entidad `Recording`.
 
-Tampoco se soporta la web: `expo-sqlite` no ofrece transacciones exclusivas en
-esa plataforma. El objetivo es tablet/móvil (iOS y Android).
+La web (`npm run web`) sirve solo para **previsualizar la interfaz en el PC**:
+`expo-sqlite` no ofrece transacciones exclusivas en esa plataforma, así que los
+partidos reales se juegan en la tablet/móvil (iOS y Android).
 
 ## 7.10 Verificación
 
