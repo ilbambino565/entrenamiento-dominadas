@@ -6,8 +6,9 @@ import { useMatchState, useNow } from '../../state';
 import { useTheme } from '../../ui/theme';
 import { Bench } from './Bench';
 import { ClockBar } from './ClockBar';
-import { prepareDemo } from './createDemoSession';
+import { DEMO_BENCH, DEMO_LINEUP, DEMO_TEAM_NAME, prepareMatch } from './createDemoSession';
 import type { PlayerInfo } from './demoTeam';
+import type { LineupEntry } from '../../core';
 import { ringTone } from './derived';
 import { Pitch, type TokenView } from './Pitch';
 import { SummarySheet } from './SummarySheet';
@@ -18,6 +19,10 @@ export interface LiveMatchScreenProps {
   session: MatchSession;
   players: Record<string, PlayerInfo>;
   rival?: string;
+  teamName?: string;
+  /** Alineación inicial (por defecto, la del equipo de prueba). */
+  lineup?: readonly LineupEntry[];
+  bench?: readonly string[];
 }
 
 /**
@@ -26,7 +31,14 @@ export interface LiveMatchScreenProps {
  * es la única suscrita al tick: calcula los tiempos de todos una vez por
  * segundo y se los pasa ya hechos a las fichas (memoizadas).
  */
-export function LiveMatchScreen({ session, players, rival = 'CD Rival' }: LiveMatchScreenProps) {
+export function LiveMatchScreen({
+  session,
+  players,
+  rival = 'CD Rival',
+  teamName = DEMO_TEAM_NAME,
+  lineup = DEMO_LINEUP,
+  bench = DEMO_BENCH,
+}: LiveMatchScreenProps) {
   const { engine } = session;
   const { colors } = useTheme();
   const [ready, setReady] = useState(false);
@@ -40,7 +52,7 @@ export function LiveMatchScreen({ session, players, rival = 'CD Rival' }: LiveMa
 
   useEffect(() => {
     let alive = true;
-    prepareDemo(session)
+    prepareMatch(session, lineup, bench)
       .then(() => alive && setReady(true))
       .catch((error: unknown) => {
         console.error('[LiveMatch] no se pudo preparar el partido', error);
@@ -49,7 +61,7 @@ export function LiveMatchScreen({ session, players, rival = 'CD Rival' }: LiveMa
     return () => {
       alive = false;
     };
-  }, [session]);
+  }, [session, lineup, bench]);
 
   // Un solo resumen por tick para todos: tiempos y tono del anillo (frente a la media).
   const views = useMemo<Record<string, TokenView>>(() => {
@@ -73,7 +85,16 @@ export function LiveMatchScreen({ session, players, rival = 'CD Rival' }: LiveMa
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ClockBar engine={engine} state={state} now={now} players={players} rival={rival} notify={notify} onOpenSummary={openSummary} />
+      <ClockBar
+        engine={engine}
+        state={state}
+        now={now}
+        players={players}
+        rival={rival}
+        teamName={teamName}
+        notify={notify}
+        onOpenSummary={openSummary}
+      />
       {/* Quien arrastra se pone por encima del otro contenedor para no quedar tapado. */}
       <View style={[styles.pitchArea, drag.draggingFrom === 'FIELD' && styles.onTop]}>
         <Pitch state={state} players={players} views={views} controller={controller} drag={drag} />

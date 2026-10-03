@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { formatClock, type PlayerLocation } from '../../core';
@@ -10,10 +10,10 @@ import { TOKEN_COLUMN_WIDTH, TOKEN_NAME_HEIGHT, TOKEN_SIZE } from './geometry';
 import { useDraggableToken, type DragController } from './useDragAndDrop';
 
 /**
- * Ficha de jugador (sin fotos): círculo con el dorsal y el tiempo jugado
- * dentro, y el nombre en una pastilla debajo. Memoizada: recibe todo calculado
- * por el padre, que es el único suscrito al tick; así solo cambian los textos
- * que de verdad cambian.
+ * Ficha de jugador: círculo con la foto (o el dorsal grande si no la hay) y el
+ * tiempo jugado, y el nombre en una pastilla debajo. Memoizada: recibe todo
+ * calculado por el padre, que es el único suscrito al tick; así solo cambian
+ * los textos que de verdad cambian.
  *
  * Por qué así y no "nombre / tiempo / %" bajo el círculo: la columna mide 84 dp
  * (docs: geometry.ts) para que las filas de una alineación no se pisen en un
@@ -50,6 +50,7 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
   const onField = location === 'FIELD';
   const where = onField ? 'en el campo' : 'en el banquillo';
   const injured = unavailable ? ', lesionado' : '';
+  const photo = player.photoUri;
 
   return (
     <Pressable
@@ -65,10 +66,29 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
         {/* Halo claro de 2 dp: el azul/ámbar no se separa del césped (≈1,6:1); el halo sí (≥ 4:1). */}
         {onField ? <View testID={`token-halo-${player.id}`} style={[styles.halo, { backgroundColor: colors.grassLine }]} /> : null}
         <View style={[styles.circle, { backgroundColor: fill, borderColor, borderWidth }]}>
-          <Text style={[styles.number, { color: onFill }]}>{player.number}</Text>
-          <Text style={[styles.time, TABULAR, { color: onFill }]} testID={`token-time-${player.id}`}>
-            {formatClock(playedMs)}
-          </Text>
+          {photo ? (
+            <>
+              <View style={styles.photoClip}>
+                <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" testID={`token-photo-${player.id}`} />
+              </View>
+              {/* Con foto, el dorsal pasa a una chapa pequeña y el tiempo a una banda inferior oscura. */}
+              <View style={[styles.numberBadge, isGoalkeeper && { backgroundColor: colors.amber }]}>
+                <Text style={[styles.numberBadgeText, isGoalkeeper && { color: colors.onAmber }]}>{player.number}</Text>
+              </View>
+              <View style={styles.timeBand}>
+                <Text style={[styles.timeOnPhoto, TABULAR]} testID={`token-time-${player.id}`}>
+                  {formatClock(playedMs)}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.number, { color: onFill }]}>{player.number}</Text>
+              <Text style={[styles.time, TABULAR, { color: onFill }]} testID={`token-time-${player.id}`}>
+                {formatClock(playedMs)}
+              </Text>
+            </>
+          )}
           {unavailable ? <Text style={styles.badge}>🩹</Text> : null}
         </View>
       </View>
@@ -104,6 +124,7 @@ export function DraggablePlayerToken({ controller, from, style, ...token }: Drag
 }
 
 const HALO = 2;
+const OVERLAY = 'rgba(15, 23, 42, 0.74)';
 
 const styles = StyleSheet.create({
   column: { width: TOKEN_COLUMN_WIDTH, alignItems: 'center' },
@@ -133,6 +154,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Recorte circular dentro del borde; el 🩹 queda fuera de este recorte.
+  photoClip: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, borderRadius: TOKEN_SIZE / 2, overflow: 'hidden' },
+  photo: { width: '100%', height: '100%' },
+  numberBadge: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: OVERLAY,
+    alignItems: 'center',
+  },
+  numberBadgeText: { color: '#ffffff', fontSize: 11, lineHeight: 16, fontWeight: '800' },
+  timeBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingVertical: 1,
+    backgroundColor: OVERLAY,
+    borderBottomLeftRadius: TOKEN_SIZE / 2,
+    borderBottomRightRadius: TOKEN_SIZE / 2,
+    alignItems: 'center',
+  },
+  timeOnPhoto: { color: '#ffffff', fontSize: 12, lineHeight: 14, fontWeight: '700' },
   number: { fontSize: 20, lineHeight: 22, fontWeight: '800' },
   time: { fontSize: 14, lineHeight: 16, fontWeight: '700' },
   badge: { position: 'absolute', right: -4, top: -4, fontSize: 16 },

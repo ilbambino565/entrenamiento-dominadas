@@ -4,6 +4,8 @@ export interface PlayerInfo {
   name: string;
   number: number;
   isGoalkeeper?: boolean;
+  /** Foto (data URI o archivo local). Sin ella la ficha muestra el dorsal grande. */
+  photoUri?: string;
 }
 
 export const DEMO_PLAYERS: readonly PlayerInfo[] = [

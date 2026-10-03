@@ -15,7 +15,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <LiveMatchScreen session={demo.session} players={demo.players} />
+        <LiveMatchScreen
+          session={demo.session}
+          players={demo.players}
+          teamName={demo.teamName}
+          lineup={demo.lineup}
+          bench={demo.bench}
+        />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     </GestureHandlerRootView>

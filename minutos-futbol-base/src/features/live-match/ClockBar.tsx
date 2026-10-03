@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import crest from '../../../assets/club/escudo-circular-128.png';
 import type { MatchEngine } from '../../app-services/matchEngine';
 import { formatClock, periodClockMs, type LineupEntry, type MatchState } from '../../core';
 import { TABULAR, useTheme } from '../../ui/theme';
@@ -14,6 +15,7 @@ export interface ClockBarProps {
   now: number;
   players: Record<string, PlayerInfo>;
   rival: string;
+  teamName: string;
   notify: Notify;
   onOpenSummary: () => void;
 }
@@ -62,7 +64,7 @@ function periodLabel(state: MatchState, blinkOn: boolean): { text: string; dim: 
   }
 }
 
-export function ClockBar({ engine, state, now, players, rival, notify, onOpenSummary }: ClockBarProps) {
+export function ClockBar({ engine, state, now, players, rival, teamName, notify, onOpenSummary }: ClockBarProps) {
   const { colors, sizes } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [hint, setHint] = useState(false);
@@ -146,7 +148,12 @@ export function ClockBar({ engine, state, now, players, rival, notify, onOpenSum
     <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.surfaceRaised }]}>
       <View style={styles.top}>
         <View style={styles.titleBlock}>
-          <Text style={[styles.rival, { color: colors.text }]}>vs {rival}</Text>
+          <View style={styles.teamRow}>
+            <Image source={crest} style={styles.crest} accessibilityIgnoresInvertColors />
+            <Text style={[styles.rival, { color: colors.text }]} numberOfLines={1} testID="team-line">
+              {teamName} · vs {rival}
+            </Text>
+          </View>
           <View style={styles.clockRow}>
             <Text style={[styles.clock, TABULAR, { color: colors.text, fontSize: sizes.clockFont }]} testID="clock">
               {clock}
@@ -231,7 +238,9 @@ const styles = StyleSheet.create({
   bar: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 8, borderBottomWidth: 2 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   titleBlock: { flex: 1 },
-  rival: { fontSize: 15, fontWeight: '600' },
+  teamRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  crest: { width: 24, height: 24 },
+  rival: { fontSize: 15, fontWeight: '600', flexShrink: 1 },
   clockRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   clock: { fontWeight: '800', lineHeight: 64 },
   period: { fontSize: 20, fontWeight: '800' },
