@@ -42,3 +42,6 @@ yarn-error.*
 
 # Datos personales de menores: nunca en el repositorio
 assets/private/
+
+# Exportación web local (npx expo export): no se versiona
+dist-web/
