@@ -9,11 +9,12 @@ Prioridad: **VELOCIDAD > SIMPLICIDAD > FIABILIDAD > ESTADÍSTICAS**.
 
 Formato inicial: fútbol 7. Arquitectura preparada para fútbol 8 y fútbol 11.
 
-> Estado: **núcleo en construcción** (hitos M0-M2 del roadmap). Existe el dominio
-> puro, la persistencia de la timeline, el motor del partido y el módulo de
-> cámara desacoplado; todavía no hay pantallas de partido. El primer objetivo
-> sigue siendo que el flujo `INICIAR PARTIDO → MOVER JUGADORES → CONTROLAR
-> MINUTOS → FINALIZAR PARTIDO` sea completamente sólido antes de añadir nada más.
+> Estado: **pantalla de partido operativa con equipo de prueba** (hitos M0-M2 y
+> M5 del roadmap). Existen el dominio puro, la persistencia de la timeline, el
+> motor del partido, el módulo de cámara desacoplado y la pantalla P8 (campo,
+> banquillo, reloj, drag & drop, deshacer, resumen) montada en `App.tsx` con un
+> equipo ficticio en memoria. Faltan plantilla, convocatoria, creación de partido
+> y la persistencia SQLite enchufada a la pantalla (M3, M4 y recuperación).
 
 ## Comandos
 
