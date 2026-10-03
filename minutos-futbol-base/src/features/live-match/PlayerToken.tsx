@@ -188,9 +188,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingHorizontal: 6,
     borderRadius: TOKEN_NAME_HEIGHT / 2,
-    maxWidth: TOKEN_COLUMN_WIDTH,
+    // Un poco más ancha que la columna: nombres de 9 letras (GUILLERMO) caben sin cortarse.
+    maxWidth: TOKEN_COLUMN_WIDTH + 16,
     justifyContent: 'center',
   },
-  name: { fontSize: 13, lineHeight: 16, fontWeight: '700', textTransform: 'uppercase' },
+  name: { fontSize: 12, lineHeight: 16, fontWeight: '700', textTransform: 'uppercase', letterSpacing: -0.2 },
   footnote: { fontSize: 11, lineHeight: 13, marginTop: 1, minHeight: 13 },
 });
