@@ -10,8 +10,9 @@ import {
 import type { MatchConfig } from '../core';
 import type { EventStore } from '../db/eventStore';
 import { createEventBus } from '../events/bus';
+import type { AppEventMap } from '../events/topics';
 import { createCameraTimelineBridge } from './cameraTimelineBridge';
-import { createMatchEngine, type AppBus, type AppBusEventMap, type MatchEngine } from './matchEngine';
+import { createMatchEngine, type AppBus, type MatchEngine } from './matchEngine';
 
 /**
  * Raíz de composición de un partido: motor + bus + cámara + puente.
@@ -38,13 +39,17 @@ export interface MatchSession {
   bus: AppBus;
   camera: CameraService;
   cameraStore: CameraStore;
-  /** Desuscribe el puente y libera la cámara. No toca la timeline. */
+  /**
+   * Libera la cámara y después desuscribe el puente. En ese orden: si había
+   * una grabación en curso, al soltar la cámara se publica `record.stopped`
+   * y la timeline registra su cierre antes de que el puente deje de escuchar.
+   */
   dispose(): Promise<void>;
 }
 
 export function createMatchSession(deps: MatchSessionDeps): MatchSession {
   const { config, store, now, newId } = deps;
-  const bus = deps.bus ?? createEventBus<AppBusEventMap>();
+  const bus: AppBus = deps.bus ?? createEventBus<AppEventMap>();
 
   const engine = createMatchEngine({ config, store, bus, now, newId });
 
@@ -66,8 +71,8 @@ export function createMatchSession(deps: MatchSessionDeps): MatchSession {
     camera,
     cameraStore,
     async dispose() {
-      unbridge();
       await camera.dispose();
+      unbridge();
     },
   };
 }

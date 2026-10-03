@@ -46,16 +46,8 @@ import { uuidv7 } from '../lib/uuid';
  * estado. Nada de `src/camera` se importa aquí.
  */
 
-/**
- * `EventBus` exige `Record<string, unknown>` y `AppEventMap` es una
- * intersección de interfaces, sin firma de índice implícita, así que
- * `EventBus<AppEventMap>` no compila. Este tipo mapeado tiene el mismo
- * contenido y sí cumple la restricción. Es estructuralmente idéntico al
- * `AppBusEventMap` del módulo de cámara (que el motor no importa a propósito):
- * un mismo bus sirve para los dos.
- */
-export type AppBusEventMap = { [K in keyof AppEventMap]: AppEventMap[K] };
-export type AppBus = EventBus<AppBusEventMap>;
+/** El bus de la app: temas del partido y de la cámara. Un mismo bus sirve para los dos lados. */
+export type AppBus = EventBus<AppEventMap>;
 
 export interface MatchEngineDeps {
   config: MatchConfig;
@@ -92,8 +84,8 @@ export interface MatchEngine {
   startHalftime(at?: number): Promise<MatchEvent>;
   startNextPeriod(at?: number): Promise<MatchEvent>;
   end(reason?: MatchEndReason, at?: number): Promise<MatchEvent>;
-  playerIn(playerId: string, position: FieldPosition, at?: number): Promise<MatchEvent>;
-  playerOut(playerId: string, at?: number): Promise<MatchEvent>;
+  enterPlayer(playerId: string, position: FieldPosition, at?: number): Promise<MatchEvent>;
+  leavePlayer(playerId: string, at?: number): Promise<MatchEvent>;
   /** Sin `position`, el que entra ocupa el sitio del que sale. */
   substitute(inPlayerId: string, outPlayerId: string, position?: FieldPosition, at?: number): Promise<MatchEvent>;
   movePlayer(playerId: string, position: FieldPosition, at?: number): Promise<MatchEvent>;
@@ -114,11 +106,21 @@ export interface MatchEngine {
    */
   recordExternalEvent(input: AnyNewMatchEvent): Promise<MatchEvent>;
 
-  /** Anula el último evento de usuario no anulado. Devuelve el anulado, o null si no hay. */
-  undo(at?: number): Promise<MatchEvent | null>;
-  canUndo(): boolean;
+  /**
+   * Anula el último evento de usuario no anulado y devuelve su copia anulada
+   * (null si no hay nada que deshacer). Con `expectedTargetId` (el evento que
+   * la UI mostraba en el botón), rechaza con MatchRuleError('INVALID_EVENT') si
+   * entre tanto entró otro gesto: nunca se deshace algo distinto de lo que se ve.
+   */
+  undo(at?: number, expectedTargetId?: string): Promise<MatchEvent | null>;
+  /** Lo que desharía `undo()` ahora mismo (para el rótulo del botón). */
   peekUndo(): MatchEvent | null;
 
+  /**
+   * Consultas. `now` se acota a la última marca guardada: si el reloj del
+   * sistema ha retrocedido, los tramos abiertos se cierran en un instante
+   * coherente con los ya cerrados y reloj y jugadores siguen cuadrando.
+   */
   playedMs(playerId: string, now?: number): number;
   clockMs(now?: number): number;
   summary(now?: number): MatchSummary;
@@ -155,8 +157,14 @@ export function createMatchEngine(deps: MatchEngineDeps): MatchEngine {
 
   // ───────────── Construcción y commit ─────────────
 
+  function requireInstant(value: number, what: string): number {
+    if (!Number.isFinite(value)) throw new MatchRuleError('INVALID_EVENT', `${what} no es un instante válido: ${value}`);
+    return value;
+  }
+
   /** Evento completo a partir de la intención. `matchTimeMs`/`period` se rellenan en `derive`. */
   function materialize(base: MatchState, input: AnyNewMatchEvent, source: EventSource): MatchEvent {
+    requireInstant(input.timestamp, `timestamp de ${input.type}`);
     return {
       id: newId(),
       matchId,
@@ -281,46 +289,87 @@ export function createMatchEngine(deps: MatchEngineDeps): MatchEngine {
     return null;
   }
 
-  function undo(at?: number): Promise<MatchEvent | null> {
+  /**
+   * Recalcula `matchTimeMs`/`period` de toda la timeline y persiste solo los
+   * que cambian (p. ej. deshacer una pausa mueve el minuto de los eventos
+   * posteriores). Si el disco falla, la memoria se queda con los derivados
+   * antiguos, iguales a los del disco: nunca memoria ≠ disco. El siguiente
+   * `load()` o deshacer los volverá a intentar.
+   */
+  async function refreshDerived(current: readonly MatchEvent[]): Promise<readonly MatchEvent[]> {
+    const derived = deriveEventFields(current);
+    const changes = changedDerivedFields(current, derived);
+    if (changes.length === 0) return derived;
+    try {
+      await store.updateDerived(matchId, changes);
+      return derived;
+    } catch (error) {
+      console.warn('[MatchEngine] no se pudieron actualizar los campos derivados; se reintentará al abrir', error);
+      return current;
+    }
+  }
+
+  function undo(at?: number, expectedTargetId?: string): Promise<MatchEvent | null> {
+    // Capturado en el gesto, igual que en los comandos.
     const voidedAt = at ?? now();
     return serialize(async () => {
       requireLoaded();
+      requireInstant(voidedAt, 'instante del deshacer');
       const target = undoTarget();
       if (!target) return null;
+      if (expectedTargetId !== undefined && target.id !== expectedTargetId) {
+        throw new MatchRuleError(
+          'INVALID_EVENT',
+          `Lo último ya no es ${expectedTargetId} sino ${target.type}: vuelve a mirar qué vas a deshacer`,
+        );
+      }
 
-      // 1. Anular en disco. 2. Regenerar: el anulado solo avanza `lastSeq`, y
-      //    los posteriores no son de usuario (el objetivo era el último), así
-      //    que la regeneración no puede fallar.
+      // 1. Anular en disco y, acto seguido, en memoria. Desde aquí el deshacer
+      //    es un hecho: la pantalla lo refleja aunque falle lo que sigue. El
+      //    anulado solo avanza `lastSeq` y los posteriores no son de usuario
+      //    (el objetivo era el último), así que la regeneración no puede fallar.
       await store.markVoided(matchId, target.id, voidedAt);
       const withVoided = events.map((e) => (e.id === target.id ? { ...e, voidedAt } : e));
-      const regenerated = reduceMatch(config, withVoided);
+      state = reduceMatch(config, withVoided);
+      events = withVoided;
+      notify();
 
-      // 3. Campos derivados de TODA la timeline; se persisten solo los que cambian
-      //    (p. ej. deshacer una pausa mueve el minuto de los eventos posteriores).
-      const derived = deriveEventFields(withVoided);
-      const changes = changedDerivedFields(withVoided, derived);
-      if (changes.length > 0) await store.updateDerived(matchId, changes);
-      // La memoria ya coincide con el disco aunque el paso 4 fallara.
-      state = regenerated;
-      events = derived;
-
-      // 4. Rastro informativo: se ignora al regenerar, pero deja constancia.
-      const undone = materialize(
-        regenerated,
-        { type: 'EVENT_UNDONE', timestamp: voidedAt, metadata: { targetEventId: target.id } },
-        'system',
-      );
-      const next = applyEvent(regenerated, undone);
-      const persisted = derive(undone, next);
-      await commit(persisted, next);
+      // 2. Campos derivados (best-effort, ver refreshDerived).
+      events = await refreshDerived(withVoided);
 
       // Se devuelve la copia regenerada (sus propios campos derivados pueden
       // haber cambiado, p. ej. al anular MATCH_STARTED), no la original.
-      const voided = derived.find((e) => e.id === target.id) ?? { ...target, voidedAt };
+      const voided = events.find((e) => e.id === target.id) ?? { ...target, voidedAt };
       bus.emit('match.event.undone', { event: voided });
-      bus.emit('match.event.recorded', { event: persisted });
+
+      // 3. Rastro informativo: se ignora al regenerar. Si no se puede escribir
+      //    no invalida un deshacer ya consumado (memoria y disco coinciden).
+      try {
+        const undone = materialize(
+          state,
+          { type: 'EVENT_UNDONE', timestamp: voidedAt, metadata: { targetEventId: target.id } },
+          'system',
+        );
+        const next = applyEvent(state, undone);
+        const persisted = derive(undone, next);
+        await commit(persisted, next);
+        bus.emit('match.event.recorded', { event: persisted });
+      } catch (error) {
+        console.warn('[MatchEngine] no se pudo registrar el rastro EVENT_UNDONE', error);
+      }
       return voided;
     });
+  }
+
+  /**
+   * Instante de consulta acotado a la última marca guardada: con el reloj del
+   * sistema hacia atrás, un intervalo abierto se cerraría "antes" que el
+   * segmento ya cerrado y el jugador sumaría menos que el reloj.
+   */
+  function queryInstant(at: number): number {
+    let instant = at;
+    for (const e of events) if (e.timestamp > instant) instant = e.timestamp;
+    return instant;
   }
 
   // ───────────── API ─────────────
@@ -334,8 +383,11 @@ export function createMatchEngine(deps: MatchEngineDeps): MatchEngine {
         if (problems.length > 0) {
           throw new Error(`La timeline del partido ${matchId} viola invariantes: ${problems.join('; ')}`);
         }
+        // Comprobación de integridad al abrir (docs/03 §3.7.6): si los derivados
+        // guardados no coinciden con los recalculados (p. ej. cierre a mitad de
+        // un deshacer), gana el log y se reescriben.
         state = regenerated;
-        events = stored;
+        events = await refreshDerived(stored);
         loaded = true;
         notify();
         return state;
@@ -362,9 +414,9 @@ export function createMatchEngine(deps: MatchEngineDeps): MatchEngine {
     end: (reason = 'NORMAL', at) =>
       command(at, (timestamp) => ({ type: 'MATCH_ENDED', timestamp, metadata: { reason } })),
 
-    playerIn: (playerId, position, at) =>
+    enterPlayer: (playerId, position, at) =>
       command(at, (timestamp) => ({ type: 'PLAYER_ENTERED', timestamp, playerId, metadata: { position } })),
-    playerOut: (playerId, at) =>
+    leavePlayer: (playerId, at) =>
       command(at, (timestamp) => ({ type: 'PLAYER_LEFT', timestamp, playerId, metadata: {} })),
     substitute: (inPlayerId, outPlayerId, position, at) =>
       command(at, (timestamp, current) => {
@@ -421,11 +473,10 @@ export function createMatchEngine(deps: MatchEngineDeps): MatchEngine {
       }),
 
     undo,
-    canUndo: () => undoTarget() !== null,
     peekUndo: undoTarget,
 
-    playedMs: (playerId, at = now()) => playerPlayedMs(state, playerId, at),
-    clockMs: (at = now()) => matchClockMs(state.clockSegments, at),
-    summary: (at = now()) => summarizeMatch(state, at),
+    playedMs: (playerId, at = now()) => playerPlayedMs(state, playerId, queryInstant(at)),
+    clockMs: (at = now()) => matchClockMs(state.clockSegments, queryInstant(at)),
+    summary: (at = now()) => summarizeMatch(state, queryInstant(at)),
   };
 }

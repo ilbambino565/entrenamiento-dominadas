@@ -4,7 +4,7 @@ import type { ClockSegment, MatchState, PlayerInterval } from '../state';
 import { applyEvent, createInitialState } from '../reducer';
 import { checkInvariants } from '../invariants';
 import { deriveEventFields } from '../derive';
-import { formatClock, matchClockMs, overlapMs, periodAt, playedMs, playerPlayedMs, toMatchTimeMs } from '../time';
+import { formatClock, matchClockMs, overlapMs, playedMs, playerPlayedMs, toMatchTimeMs } from '../time';
 import { EventFactory, MINUTE, SECOND, STARTERS, T0, f7Config, pos, run } from './helpers';
 
 /**
@@ -190,26 +190,26 @@ describe('verificado: propiedad con timestamps NO monótonos (saltos del reloj d
   });
 });
 
-describe('HALLAZGO: reloj del sistema hacia atrás', () => {
-  it('intervalo abierto ∩ segmento cerrado con now < endedAt: el jugador suma menos que el reloj aunque nunca salió', () => {
+describe('reloj del sistema hacia atrás', () => {
+  it('intervalo abierto ∩ segmento cerrado con now < endedAt: la fórmula pura cierra el intervalo en now', () => {
     // Pausa a las 10:00 reales; después el móvil corrige la hora 4 min hacia
-    // atrás (now = 6:00). El reloj grande sigue en 10:00 (segmento cerrado),
-    // pero Lucas, que sigue en el campo, baja a 06:00. Por causalidad (su
-    // intervalo seguía abierto cuando se cerró el segmento) debería sumar 10:00.
+    // atrás (now = 6:00). La fórmula pura da 06:00 para Lucas y 10:00 para el
+    // reloj: por eso el MatchEngine acota `now` a la última marca guardada
+    // antes de consultar (ver app-services: "reloj del sistema hacia atrás").
     const segments = [seg(1, 0, 10 * MINUTE)];
     const lucas = [iv('lucas', 0, null)];
     const now = at(6 * MINUTE);
-    const clock = matchClockMs(segments, now);
-    expect(clock).toBe(10 * MINUTE);
-    expect(playedMs(lucas, segments, now)).toBe(clock);
+    expect(matchClockMs(segments, now)).toBe(10 * MINUTE);
+    expect(playedMs(lucas, segments, now)).toBe(6 * MINUTE);
+    // Con `now` acotado a la última marca (10:00) vuelven a cuadrar.
+    expect(playedMs(lucas, segments, at(10 * MINUTE))).toBe(10 * MINUTE);
   });
 
-  it('salir y volver a entrar con el reloj hacia atrás solapa dos intervalos del mismo jugador: suma más que el reloj', () => {
+  it('salir y volver a entrar con el reloj hacia atrás: los dos tramos solapados no se cuentan dos veces', () => {
     // Lucas sale a las 10:00 reales; el reloj del sistema retrocede 2 min y
-    // vuelve a entrar a las 8:00 reales. Sus dos intervalos se solapan 2 min y
-    // esos 2 min se cuentan dos veces: 22' jugados con un reloj de 20'.
-    // Viola §2.5.2 (intervalos de un jugador sin solapar) y §3.7.8
-    // (Σ minutos ≤ jugadores × reloj; nadie supera el reloj).
+    // vuelve a entrar a las 8:00 reales. Sus dos intervalos se solapan 2 min;
+    // `playerPlayedMs` los une antes de intersecar: nadie supera el reloj
+    // (§2.5.2 y §3.7.8).
     const ev = new EventFactory();
     const state = run([
       ev.lineup(T0, STARTERS),
@@ -220,28 +220,6 @@ describe('HALLAZGO: reloj del sistema hacia atrás', () => {
     const now = at(20 * MINUTE);
     const clock = matchClockMs(state.clockSegments, now);
     expect(clock).toBe(20 * MINUTE);
-    expect(playerPlayedMs(state, 'lucas', now)).toBeLessThanOrEqual(clock);
-  });
-});
-
-describe('observación: periodAt (sin uso en producción) no coincide con el periodo derivado', () => {
-  it('para un evento encolado tarde tras PERIOD_STARTED, derive dice periodo 2 y periodAt dice 1', () => {
-    // Gesto soltado a las 34:59 reales que entra en la cola después del
-    // PERIOD_STARTED de las 35:00. El periodo persistido sigue el orden de seq
-    // (2); `periodAt` mira startedAt ≤ timestamp y devuelve 1. Dos respuestas
-    // distintas a la misma pregunta: si alguien usa `periodAt` en la UI
-    // discrepará del campo `period` guardado.
-    const ev = new EventFactory();
-    const events = [
-      ev.lineup(T0 - MINUTE, STARTERS),
-      ev.start(T0),
-      ev.halftime(at(25 * MINUTE)),
-      ev.nextPeriod(at(35 * MINUTE)),
-      ev.goal(at(35 * MINUTE - SECOND), 'lucas'),
-    ];
-    const derived = deriveEventFields(events);
-    const segments = run(events).clockSegments;
-    expect(derived[4]?.period).toBe(2);
-    expect(periodAt(segments, at(35 * MINUTE - SECOND))).toBe(1);
+    expect(playerPlayedMs(state, 'lucas', now)).toBe(clock);
   });
 });

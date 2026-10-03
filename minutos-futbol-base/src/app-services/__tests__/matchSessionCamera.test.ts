@@ -1,7 +1,6 @@
+import type { AppEventMap } from '../../events/topics';
 import {
   createCameraAutomation,
-  createCameraService,
-  createCameraStore,
   createDummyCameraController,
   type CameraController,
   type CameraSettings,
@@ -11,13 +10,10 @@ import type { LineupEntry } from '../../core';
 import { createInMemoryEventStore } from '../../db';
 import { createMatchSession } from '../createMatchSession';
 import { createEventBus } from '../../events/bus';
-import { createCameraTimelineBridge } from '../cameraTimelineBridge';
-import { createMatchEngine, type AppBusEventMap } from '../matchEngine';
 
 /**
- * REVISIÓN (arquitectura y desacoplamiento). Tests de evidencia:
- * - el primero DEMUESTRA UN BUG en el orden de `dispose()` y falla a propósito;
- * - el segundo comprueba que un controlador colgado no bloquea el partido.
+ * Sesión de partido con cámara: el orden de `dispose()` (primero la cámara,
+ * después el puente) y la garantía de que la cámara nunca bloquea el partido.
  */
 
 const FIELD = ['lucas', 'mateo', 'leo', 'daniel', 'pablo', 'alex', 'marco'] as const;
@@ -45,8 +41,8 @@ function clockAndIds() {
   };
 }
 
-describe('review-arquitectura: createMatchSession', () => {
-  it('BUG: dispose() con grabación en curso para la cámara pero deja la grabación ABIERTA en la timeline', async () => {
+describe('createMatchSession con cámara', () => {
+  it('dispose() con una grabación en curso la para y la cierra también en la timeline', async () => {
     const clock = clockAndIds();
     const dummy = createDummyCameraController({ now: clock.now });
     const session = createMatchSession({
@@ -69,13 +65,16 @@ describe('review-arquitectura: createMatchSession', () => {
     await session.dispose();
     await settle();
 
-    // La cámara SÍ paró la grabación (el servicio publicó camera.record.stopped al desconectar)...
+    // La cámara paró la grabación (el servicio publicó camera.record.stopped al
+    // desconectar) y, como el puente seguía escuchando, la timeline la cerró:
+    // ningún evento posterior se atribuirá a una grabación que ya no existe.
     expect(dummy.getStatus().recording).toBe('idle');
-    // ...pero `unbridge()` se ejecuta ANTES de `camera.dispose()`, así que ese
-    // evento nunca llega a la timeline: CAMERA_RECORDING_STARTED queda sin cierre
-    // y cualquier evento posterior se atribuiría a una grabación que ya no existe.
-    const cameraTypes = session.engine.getTimeline().filter((e) => e.type.startsWith('CAMERA_')).map((e) => e.type);
-    expect(cameraTypes).toEqual(['CAMERA_RECORDING_STARTED', 'CAMERA_RECORDING_STOPPED']);
+    const cameraEvents = session.engine.getTimeline().filter((e) => e.type.startsWith('CAMERA_'));
+    expect(cameraEvents.map((e) => [e.type, e.timestamp])).toEqual([
+      ['CAMERA_RECORDING_STARTED', T0 + 3 * MINUTE],
+      ['CAMERA_RECORDING_STOPPED', T0 + 5 * MINUTE],
+    ]);
+    expect(session.bus.listenerCount('camera.record.stopped')).toBe(0);
   });
 
   it('un controlador colgado no bloquea ningún comando del partido, ni siquiera con la automatización registrada', async () => {
@@ -113,37 +112,29 @@ describe('review-arquitectura: createMatchSession', () => {
     expect(session.engine.getTimeline().some((e) => e.type.startsWith('CAMERA_'))).toBe(false);
     stopAutomation();
   });
-});
 
-describe('review-arquitectura: verificación del arreglo propuesto para dispose()', () => {
-  it('liberando la cámara ANTES de desuscribir el puente, la timeline cierra la grabación', async () => {
+  it('con un bus compartido, dispose() solo retira las suscripciones de la sesión', async () => {
     const clock = clockAndIds();
-    const dummy = createDummyCameraController({ now: clock.now });
-    const bus = createEventBus<AppBusEventMap>();
-    const engine = createMatchEngine({ config: f7Config(), store: createInMemoryEventStore(), bus, now: clock.now, newId: clock.newId });
-    const cameraStore = createCameraStore(ZONES_SETTINGS);
-    const camera = createCameraService({ bus, store: cameraStore, controller: dummy, now: clock.now, newId: clock.newId });
-    const unbridge = createCameraTimelineBridge(bus, engine);
+    const shared = createEventBus<AppEventMap>();
+    const foreign = jest.fn();
+    shared.on('camera.record.started', foreign);
+    const session = createMatchSession({
+      config: f7Config(),
+      store: createInMemoryEventStore(),
+      cameraSettings: null,
+      bus: shared,
+      now: clock.now,
+      newId: clock.newId,
+    });
+    expect(session.bus).toBe(shared);
+    // El puente escucha los cinco temas de cámara aunque la cámara esté deshabilitada.
+    expect(shared.listenerCount('camera.record.started')).toBe(2);
+    expect(shared.listenerCount('camera.zone.changed')).toBe(1);
 
-    await engine.load();
-    await engine.setLineup(lineup(FIELD), [...SUBS]);
-    await engine.start();
-    await camera.connect();
-    clock.set(T0 + 3 * MINUTE);
-    await camera.startRecording();
-    await settle();
-
-    clock.set(T0 + 5 * MINUTE);
-    // Orden invertido respecto a createMatchSession.dispose(): primero la cámara, después el puente.
-    await camera.dispose();
-    unbridge();
-    await settle();
-
-    const cameraEvents = engine.getTimeline().filter((e) => e.type.startsWith('CAMERA_'));
-    expect(cameraEvents.map((e) => [e.type, e.timestamp])).toEqual([
-      ['CAMERA_RECORDING_STARTED', T0 + 3 * MINUTE],
-      ['CAMERA_RECORDING_STOPPED', T0 + 5 * MINUTE],
-    ]);
-    expect(bus.listenerCount('camera.record.stopped')).toBe(0);
+    await session.dispose();
+    expect(shared.listenerCount('camera.record.started')).toBe(1);
+    expect(shared.listenerCount('camera.zone.changed')).toBe(0);
+    shared.emit('camera.record.started', { recordingId: 'r', deviceType: null, timestamp: T0 });
+    expect(foreign).toHaveBeenCalledTimes(1);
   });
 });

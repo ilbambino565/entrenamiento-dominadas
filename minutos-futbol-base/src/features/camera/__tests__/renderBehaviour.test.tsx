@@ -1,6 +1,7 @@
+import type { AppEventMap } from '../../../events/topics';
 import { act, render } from '@testing-library/react-native';
 import { Text } from 'react-native';
-import { INITIAL_CAMERA_STATUS, createCameraService, createCameraStore, createDummyCameraController, type AppBusEventMap, type CameraStore } from '../../../camera';
+import { INITIAL_CAMERA_STATUS, createCameraService, createCameraStore, createDummyCameraController, type CameraStore } from '../../../camera';
 import { createEventBus } from '../../../events/bus';
 import { CameraPanel } from '../CameraPanel';
 import { selectBadgeLabel } from '../CameraStatusBadge';
@@ -43,7 +44,7 @@ describe('review-compat-expo: useCameraState con selector a primitivo', () => {
 describe('review-compat-expo: CameraPanel accesible', () => {
   it('todos los controles son Pressable con accessibilityRole="button" (9 con zoom habilitado)', async () => {
     const now = () => 1_000;
-    const bus = createEventBus<AppBusEventMap>();
+    const bus = createEventBus<AppEventMap>();
     const store = createCameraStore({ enabled: true, mode: 'zones', deviceType: 'dummy', zoomEnabled: true });
     const service = createCameraService({ bus, store, controller: createDummyCameraController({ now }), now });
     const screen = await render(<CameraPanel store={store} service={service} visible />);

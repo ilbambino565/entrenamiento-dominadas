@@ -1,3 +1,4 @@
+import type { AppEventMap } from '../../events/topics';
 import {
   MatchRuleError,
   checkInvariants,
@@ -10,7 +11,7 @@ import { F7_SQUAD, MINUTE, SECOND, T0, f7Config, pos } from '../../core/__tests_
 import { createInMemoryEventStore, createSqliteEventStore, migrate, type EventStore } from '../../db';
 import { createNodeSqliteDouble, describeWithSqlite, openMemoryDatabase } from '../../db/__tests__/nodeSqlite';
 import { createEventBus } from '../../events/bus';
-import { createMatchEngine, type AppBusEventMap, type MatchEngine } from '../matchEngine';
+import { createMatchEngine, type MatchEngine } from '../matchEngine';
 
 /**
  * Partido F7 de referencia (tiempos relativos a T0 = pitido inicial):
@@ -55,7 +56,7 @@ function setup(store: EventStore = createInMemoryEventStore()) {
   };
   let n = 0;
   const newId = () => `evt-${String(++n).padStart(3, '0')}`;
-  const bus = createEventBus<AppBusEventMap>();
+  const bus = createEventBus<AppEventMap>();
   const published: Published[] = [];
   for (const topic of ALL_TOPICS) bus.on(topic, (payload) => published.push({ topic, payload }));
   const engine = createMatchEngine({ config: f7Config(), store, bus, now: clock.now, newId });
@@ -188,7 +189,7 @@ describe('createMatchEngine', () => {
       await engine.start();
       clock.set(T0 + 10 * MINUTE);
       const accidental = await engine.substitute('hugo', 'lucas');
-      expect(engine.canUndo()).toBe(true);
+      expect((engine.peekUndo() !== null)).toBe(true);
       expect(engine.peekUndo()).toEqual(accidental);
 
       const undoAt = T0 + 10 * MINUTE + 20 * SECOND;
@@ -227,7 +228,7 @@ describe('createMatchEngine', () => {
       expect(engine.getState().status).toBe('READY');
       expect((await engine.undo())?.type).toBe('LINEUP_SET');
       expect(engine.getState().status).toBe('DRAFT');
-      expect(engine.canUndo()).toBe(false);
+      expect((engine.peekUndo() !== null)).toBe(false);
       expect(engine.peekUndo()).toBeNull();
       expect(await engine.undo()).toBeNull();
       expect(checkInvariants(engine.getState())).toEqual([]);
@@ -277,7 +278,7 @@ describe('createMatchEngine', () => {
       await engine.undo(); // anula MATCH_ENDED: el partido vuelve a estar en juego
       expect(engine.getState().status).toBe('RUNNING');
 
-      const second = createMatchEngine({ config: f7Config(), store, bus: createEventBus<AppBusEventMap>(), now: clock.now });
+      const second = createMatchEngine({ config: f7Config(), store, bus: createEventBus<AppEventMap>(), now: clock.now });
       const loaded = await second.load();
 
       expect(loaded).toEqual(engine.getState());
@@ -334,7 +335,7 @@ describe('createMatchEngine', () => {
       clock.set(T0 + 5 * MINUTE);
 
       // El segundo solo es válido si el primero ya liberó una plaza en el campo.
-      const [left, entered] = await Promise.all([engine.playerOut('leo'), engine.playerIn('david', pos(2))]);
+      const [left, entered] = await Promise.all([engine.leavePlayer('leo'), engine.enterPlayer('david', pos(2))]);
 
       expect([left.seq, entered.seq]).toEqual([3, 4]);
       expect([left.timestamp, entered.timestamp]).toEqual([T0 + 5 * MINUTE, T0 + 5 * MINUTE]);
@@ -385,8 +386,8 @@ describe('createMatchEngine', () => {
       const publishedBefore = published.length;
 
       expect(await ruleCode(engine.pause())).toBe('INVALID_STATUS');
-      expect(await ruleCode(engine.playerIn('hugo', pos(7)))).toBe('FIELD_FULL');
-      expect(await ruleCode(engine.playerIn('nadie', pos(7)))).toBe('UNKNOWN_PLAYER');
+      expect(await ruleCode(engine.enterPlayer('hugo', pos(7)))).toBe('FIELD_FULL');
+      expect(await ruleCode(engine.enterPlayer('nadie', pos(7)))).toBe('UNKNOWN_PLAYER');
       expect(await ruleCode(engine.movePlayer('lucas', { x: 2, y: 0 }))).toBe('INVALID_POSITION');
 
       expect(engine.getState()).toBe(before);
@@ -441,9 +442,9 @@ describe('createMatchEngine', () => {
       clock.set(T0);
       await engine.start();
       clock.set(T0 + 3 * MINUTE);
-      await engine.playerOut('marco');
+      await engine.leavePlayer('marco');
       clock.set(T0 + 4 * MINUTE);
-      await engine.playerIn('david', pos(6));
+      await engine.enterPlayer('david', pos(6));
 
       const matchId = f7Config().matchId;
       expect(published.filter((p) => p.topic === 'player.left').map((p) => p.payload)).toEqual([
@@ -541,7 +542,7 @@ describeWithSqlite('createMatchEngine sobre SQLite real', () => {
     clock.set(T0 + 66 * MINUTE);
     await engine.undo();
 
-    const second = createMatchEngine({ config: f7Config(), store, bus: createEventBus<AppBusEventMap>(), now: clock.now });
+    const second = createMatchEngine({ config: f7Config(), store, bus: createEventBus<AppEventMap>(), now: clock.now });
     await second.load();
 
     expect(second.getState()).toEqual(engine.getState());

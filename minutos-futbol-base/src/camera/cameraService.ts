@@ -5,7 +5,9 @@ import { normalizeCameraSettings } from './settings';
 import { INITIAL_CAMERA_STATUS, cloneCameraStatus } from './status';
 import {
   CameraError,
+  type CameraCapabilities,
   type CameraController,
+  type CameraErrorCode,
   type CameraEventMap,
   type CameraSettings,
   type CameraStatus,
@@ -20,21 +22,14 @@ import {
  * publica `camera.*` en el bus para que la timeline del partido lo registre.
  *
  * Contrato con la UI: ninguna operación lanza. Devuelve `true` si se ejecutó y
- * `false` si no procedía (modo external, sin controlador, zoom deshabilitado)
- * o si falló; los fallos quedan en `status.error` y se publican como
- * `camera.error`. Así la pantalla del partido nunca se bloquea por la cámara.
+ * `false` si no procedía (modo external, sin controlador, capacidad ausente,
+ * zoom deshabilitado) o si falló; los fallos quedan en `status.error` y se
+ * publican como `camera.error`. Así la pantalla del partido nunca se bloquea
+ * por la cámara.
  */
-
-/**
- * `EventBus` exige `Record<string, unknown>` y una interfaz (CameraEventMap) no
- * tiene firma de índice implícita; este tipo mapeado, con el mismo contenido,
- * sí. Un `EventBus<CameraEventMap>` declarado con una versión del bus que lo
- * admita sigue siendo compatible: son estructuralmente idénticos.
- */
-export type CameraBusEventMap = { [K in keyof CameraEventMap]: CameraEventMap[K] };
 
 export interface CameraServiceDeps {
-  bus: EventBus<CameraBusEventMap>;
+  bus: EventBus<CameraEventMap>;
   store: CameraStore;
   controller?: CameraController;
   /** Reloj inyectable (epoch ms). Por defecto `Date.now`. */
@@ -48,6 +43,8 @@ export interface CameraService {
   configure(settings?: Partial<CameraSettings> | null): void;
   getSettings(): CameraSettings;
   getStatus(): CameraStatus;
+  /** Capacidades del controlador adjunto; null si no hay ninguno. */
+  getCapabilities(): CameraCapabilities | null;
 
   /** Adjunta (o sustituye) el controlador. No desconecta el anterior: usa detachController. */
   attachController(controller: CameraController): void;
@@ -76,7 +73,11 @@ export interface CameraService {
   dispose(): Promise<void>;
 }
 
-/** Mensaje para `status.error` / `camera.error`. El código va delante para poder filtrarlo. */
+function errorCode(error: unknown): CameraErrorCode | null {
+  return error instanceof CameraError ? error.code : null;
+}
+
+/** Texto para `status.error`: con el código delante para poder filtrarlo a simple vista. */
 function describeError(error: unknown): string {
   if (error instanceof CameraError) return `${error.code}: ${error.message}`;
   if (error instanceof Error) return error.message;
@@ -110,7 +111,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
   function fail(error: unknown): false {
     const message = describeError(error);
     patch({ error: message });
-    bus.emit('camera.error', { message, timestamp: now() });
+    bus.emit('camera.error', { code: errorCode(error), message, timestamp: now() });
     return false;
   }
 
@@ -120,8 +121,20 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     return controller;
   }
 
-  async function run(operation: (controller: CameraController) => Promise<void>): Promise<boolean> {
+  /**
+   * Controlador listo Y con la capacidad pedida. Una capacidad ausente no es
+   * un error: la UI no debería ofrecerla (igual que el zoom deshabilitado).
+   */
+  function readyFor(capability: keyof CameraCapabilities): CameraController | null {
     const target = ready();
+    return target && target.capabilities[capability] ? target : null;
+  }
+
+  async function run(
+    capability: keyof CameraCapabilities | null,
+    operation: (controller: CameraController) => Promise<void>,
+  ): Promise<boolean> {
+    const target = capability ? readyFor(capability) : ready();
     if (!target) return false;
     try {
       await operation(target);
@@ -150,7 +163,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     });
 
     if (incoming.error !== null && incoming.error !== previous.error) {
-      bus.emit('camera.error', { message: incoming.error, timestamp: now() });
+      bus.emit('camera.error', { code: 'DEVICE_ERROR', message: incoming.error, timestamp: now() });
     }
     if (lostRecordingId !== null) {
       bus.emit('camera.record.stopped', { recordingId: lostRecordingId, timestamp: now() });
@@ -161,7 +174,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     if (disposed) return;
     unsubscribe?.();
     controller = next;
-    store.setControllerAttached(true);
+    store.setControllerAttached(true, next.capabilities);
     onControllerStatus(next.getStatus());
     unsubscribe = next.subscribe(onControllerStatus);
   }
@@ -182,13 +195,13 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     unsubscribe?.();
     unsubscribe = undefined;
     controller = undefined;
-    store.setControllerAttached(false);
+    store.setControllerAttached(false, null);
     applyStatus({ ...INITIAL_CAMERA_STATUS, updatedAt: now() });
   }
 
   /** Operación de movimiento: la cámara deja de apuntar a la zona calibrada. */
   async function move(operation: (controller: CameraController) => Promise<void>): Promise<boolean> {
-    const ok = await run(operation);
+    const ok = await run('pan', operation);
     if (ok) patch({ zone: null });
     return ok;
   }
@@ -196,7 +209,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
   async function zoom(operation: (controller: CameraController) => Promise<void>): Promise<boolean> {
     // Zoom deshabilitado no es un error: la UI simplemente no debería ofrecerlo.
     if (!store.getState().settings.zoomEnabled) return false;
-    return run(operation);
+    return run('zoom', operation);
   }
 
   if (deps.controller) attachController(deps.controller);
@@ -208,15 +221,16 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
 
     getSettings: () => store.getState().settings,
     getStatus: () => cloneCameraStatus(current()),
+    getCapabilities: () => (controller ? { ...controller.capabilities } : null),
 
     attachController,
     detachController,
 
-    connect: () => run((c) => c.connect()),
-    disconnect: () => run((c) => c.disconnect()),
+    connect: () => run(null, (c) => c.connect()),
+    disconnect: () => run(null, (c) => c.disconnect()),
 
     async startRecording() {
-      const ok = await run((c) => c.startRecording());
+      const ok = await run('record', (c) => c.startRecording());
       if (!ok) return false;
       const recordingId = newId();
       patch({ recordingId });
@@ -232,7 +246,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
       // Sin recordingId el servicio no inició ninguna grabación: nada que publicar.
       const recordingId = current().recordingId;
       if (recordingId === null) return false;
-      const ok = await run((c) => c.pauseRecording());
+      const ok = await run('pause', (c) => c.pauseRecording());
       if (ok) bus.emit('camera.record.paused', { recordingId, timestamp: now() });
       return ok;
     },
@@ -240,7 +254,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     async resumeRecording() {
       const recordingId = current().recordingId;
       if (recordingId === null) return false;
-      const ok = await run((c) => c.resumeRecording());
+      const ok = await run('pause', (c) => c.resumeRecording());
       if (ok) bus.emit('camera.record.resumed', { recordingId, timestamp: now() });
       return ok;
     },
@@ -248,7 +262,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     async stopRecording() {
       const recordingId = current().recordingId;
       if (recordingId === null) return false;
-      const ok = await run((c) => c.stopRecording());
+      const ok = await run('record', (c) => c.stopRecording());
       if (!ok) return false;
       patch({ recordingId: null });
       bus.emit('camera.record.stopped', { recordingId, timestamp: now() });
@@ -256,14 +270,14 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     },
 
     async goToZone(zone) {
-      if (!ready()) return false;
+      if (!readyFor('pan')) return false;
       const { zones, smoothTransitionMs } = store.getState().settings;
       const position = zones[zone];
       if (!position) {
         return fail(new CameraError('ZONE_NOT_CALIBRATED', `La zona ${zone} no está calibrada`));
       }
       const previousZone = current().zone;
-      const ok = await run((c) => c.goToPosition(position, smoothTransitionMs));
+      const ok = await run('pan', (c) => c.goToPosition(position, smoothTransitionMs));
       if (!ok) return false;
       patch({ zone });
       bus.emit('camera.zone.changed', { zone, previousZone, timestamp: now() });
@@ -273,7 +287,7 @@ export function createCameraService(deps: CameraServiceDeps): CameraService {
     recenter: () => move((c) => c.recenter()),
     panLeft: () => move((c) => c.panLeft()),
     panRight: () => move((c) => c.panRight()),
-    stopPan: () => run((c) => c.stopPan()),
+    stopPan: () => run('pan', (c) => c.stopPan()),
 
     zoomIn: () => zoom((c) => c.zoomIn()),
     zoomOut: () => zoom((c) => c.zoomOut()),

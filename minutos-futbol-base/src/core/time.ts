@@ -50,25 +50,47 @@ export function periodClockMs(segments: readonly ClockSegment[], period: number,
   );
 }
 
+function spansPlayedMs(spans: readonly Span[], segments: readonly ClockSegment[], now: number): number {
+  let total = 0;
+  for (const span of spans) {
+    for (const s of segments) total += overlapMs(span, segmentSpan(s), now);
+  }
+  return total;
+}
+
 /** Tiempo de juego = Σ intervalos ∩ segmentos. Cuadrático, pero son ~6×6. */
 export function playedMs(
   intervals: readonly PlayerInterval[],
   segments: readonly ClockSegment[],
   now: number,
 ): number {
-  let total = 0;
-  for (const i of intervals) {
-    for (const s of segments) total += overlapMs(intervalSpan(i), segmentSpan(s), now);
+  return spansPlayedMs(intervals.map(intervalSpan), segments, now);
+}
+
+/**
+ * Une los tramos de UN jugador que se solapen o se toquen. Normalmente no se
+ * solapan, pero si el reloj del sistema retrocede entre salir y volver a
+ * entrar, el segundo tramo empieza "antes" de que acabara el primero y ese
+ * trozo no debe contarse dos veces: nadie puede sumar más que el reloj.
+ */
+export function mergeSpans(spans: readonly Span[], now: number): Span[] {
+  const ordered = [...spans].sort((a, b) => a.start - b.start);
+  const merged: Span[] = [];
+  for (const span of ordered) {
+    const last = merged[merged.length - 1];
+    if (last && span.start <= closeAt(last.end, now)) {
+      // Un extremo abierto absorbe a cualquier otro; si no, se queda el mayor.
+      if (last.end !== null) last.end = span.end === null ? null : Math.max(last.end, span.end);
+    } else {
+      merged.push({ start: span.start, end: span.end });
+    }
   }
-  return total;
+  return merged;
 }
 
 export function playerPlayedMs(state: MatchState, playerId: string, now: number): number {
-  return playedMs(
-    state.intervals.filter((i) => i.playerId === playerId),
-    state.clockSegments,
-    now,
-  );
+  const own = state.intervals.filter((i) => i.playerId === playerId).map(intervalSpan);
+  return spansPlayedMs(mergeSpans(own, now), state.clockSegments, now);
 }
 
 /**
@@ -101,17 +123,6 @@ export function fromMatchTimeMs(
     remaining -= duration;
   }
   return null;
-}
-
-/**
- * Periodo del último segmento iniciado en o antes de `timestamp`; 0 si ninguno.
- * Se recorre en orden de creación (= orden de `seq`), no por `startedAt`, para
- * que un salto del reloj del sistema no "devuelva" el partido a la 1ª parte.
- */
-export function periodAt(segments: readonly ClockSegment[], timestamp: number): number {
-  let period = 0;
-  for (const s of segments) if (s.startedAt <= timestamp) period = s.period;
-  return period;
 }
 
 /** Fracción jugada respecto al reloj real transcurrido, acotada a 0..1. */

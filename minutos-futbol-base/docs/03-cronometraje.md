@@ -96,9 +96,16 @@ function playedMs(intervals: Span[], segments: Span[], now: number): number {
 const matchClockMs = (segments: Span[], now: number) =>
   segments.reduce((acc, s) => acc + (close(s, now) - s.start), 0)
 
-/** % jugado: respecto al tiempo REAL de partido transcurrido (incluye el añadido) */
-const playedPct = (played: number, clock: number) => (clock === 0 ? 0 : played / clock)
+/** Fracción jugada (0..1) respecto al tiempo REAL de partido transcurrido (incluye el añadido) */
+const playedShare = (played: number, clock: number) => (clock <= 0 ? 0 : Math.min(1, played / clock))
 ```
+
+Dos salvaguardas que viven en la fachada (`matchEngine.ts`), no en las
+fórmulas: (1) el instante de consulta se acota a la última marca guardada, para
+que con el reloj del sistema hacia atrás un intervalo abierto no se cierre
+"antes" que un segmento ya cerrado; (2) `playerPlayedMs` une los tramos de un
+mismo jugador que se solapen (solo posible si el reloj retrocedió entre salir y
+volver a entrar), de modo que nadie suma más que el reloj.
 
 Con 14 jugadores, unos 6 intervalos por jugador y unos 6 segmentos salen menos de
 600 operaciones por segundo: despreciable.
@@ -162,7 +169,13 @@ Cada tarjeta se suscribe con un selector a `now` y calcula su valor
   por Lucas en el 10:00 y se deshace en el 10:20, Hugo suma 0 y Lucas suma esos
   20 s, porque nunca salió.
 - El botón **DESHACER** siempre está visible y muestra lo que va a deshacer
-  (`↶ Hugo⇄Lucas`) para evitar deshacer algo distinto.
+  (`↶ Hugo⇄Lucas`) para evitar deshacer algo distinto. La UI pasa el id de ese
+  evento (`undo(at, expectedTargetId)`): si entre tanto entró otro gesto en la
+  cola, el motor rechaza el deshacer y el rótulo se actualiza.
+- Rutas de fallo: la anulación se escribe primero y la memoria se actualiza
+  acto seguido; si fallan los campos derivados o el rastro `EVENT_UNDONE`, el
+  deshacer sigue siendo un hecho (memoria == disco) y `load()` repara los
+  derivados al volver a abrir.
 - Se pueden encadenar varios deshacer. No hay "rehacer" en el MVP (simplicidad).
 - Corregir eventos antiguos (no el último) se hace desde el historial (fase 2;
   el modelo ya lo permite cambiando `ts` y regenerando).
@@ -176,7 +189,7 @@ Cada tarjeta se suscribe con un selector a `now` y calcula su valor
 | App cerrada o matada por el SO | Al abrir: "Hay un partido en curso · CONTINUAR"; estado = regenerar(eventos); reloj con `Date.now()` |
 | Teléfono bloqueado varios minutos | Nada que hacer: el tiempo es una diferencia de timestamps. Recálculo en `AppState → active` |
 | Cambio de 1ª a 2ª parte | `HALFTIME_STARTED` cierra el segmento; los intervalos siguen abiertos; `PERIOD_STARTED` abre un segmento nuevo |
-| Olvido pulsar DESCANSO | Al pulsarlo tarde se ofrece en el aviso "Descanso · ajustar inicio −2 min" (corrige el `ts` del evento) |
+| Olvido pulsar DESCANSO | Fase 2: al pulsarlo tarde se ofrecerá "Descanso · ajustar inicio −2 min" (corrección del `timestamp` del evento y regeneración; el modelo ya lo permite, falta el comando) |
 | Tiempo añadido | El reloj no se para solo al llegar a 25:00: muestra `+mm:ss` y una vibración suave. El árbitro manda |
 | Partido suspendido | `MATCH_ENDED{SUSPENDED}`; las estadísticas usan el tiempo real jugado; se marca como suspendido |
 | Jugador lesionado | Arrastrar al banquillo (para su tiempo). Pulsación larga → 🩹 marcador; si se intenta meter, vibración de aviso (no se bloquea) |
@@ -218,8 +231,8 @@ Cada tarjeta se suscribe con un selector a `now` y calcula su valor
    epoch ms.
 10. **Copia de seguridad:** al finalizar se guarda un snapshot JSON del partido
     (eventos + resumen) en un archivo local. Exportable en fase 3.
-11. **Migraciones versionadas** con Drizzle y tests de migración sobre una BD con
-    datos.
+11. **Migraciones versionadas** (SQL plano con `PRAGMA user_version`) y tests de
+    migración contra un SQLite real.
 12. **Prueba de campo obligatoria** antes de cerrar el MVP: matar la app, bloquear
     el móvil 10 minutos, modo avión, batería baja, cambiar la hora. Ver
     [roadmap](06-roadmap.md).

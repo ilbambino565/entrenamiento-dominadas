@@ -1,18 +1,20 @@
+import type { CameraEventMap } from '../../camera/types';
+import type { AppEventMap } from '../../events/topics';
 import { createEventBus, type EventBus } from '../../events/bus';
-import { type AppBusEventMap } from '../automation';
-import { createCameraService, type CameraBusEventMap } from '../cameraService';
-import { INITIAL_CAMERA_STATUS, createCameraStore } from '../cameraStore';
+import { createCameraService } from '../cameraService';
+import { createCameraStore } from '../cameraStore';
+import { INITIAL_CAMERA_STATUS } from '../status';
 import { createDummyCameraController } from '../dummyCameraController';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from '../types';
 
 type Emitted = {
-  [K in keyof CameraBusEventMap]: { topic: K; payload: CameraBusEventMap[K] };
-}[keyof CameraBusEventMap];
+  [K in keyof CameraEventMap]: { topic: K; payload: CameraEventMap[K] };
+}[keyof CameraEventMap];
 
 /** Bus falso: solo graba lo que se publica. El servicio nunca se suscribe al bus. */
 function recordingBus() {
   const events: Emitted[] = [];
-  const bus: EventBus<CameraBusEventMap> = {
+  const bus: EventBus<CameraEventMap> = {
     emit: (topic, payload) => {
       events.push({ topic, payload } as Emitted);
     },
@@ -143,7 +145,7 @@ describe('createCameraService', () => {
       expect(events).toEqual([
         {
           topic: 'camera.error',
-          payload: { message: expect.stringContaining('NOT_CONNECTED'), timestamp: 1_000 },
+          payload: { code: 'NOT_CONNECTED', message: expect.stringContaining('NOT_CONNECTED'), timestamp: 1_000 },
         },
       ]);
       expect(service.getStatus().error).toContain('NOT_CONNECTED');
@@ -326,7 +328,7 @@ describe('createCameraService', () => {
       expect(events).toEqual([
         {
           topic: 'camera.error',
-          payload: { message: expect.stringContaining('ZONE_NOT_CALIBRATED'), timestamp: 1_000 },
+          payload: { code: 'ZONE_NOT_CALIBRATED', message: expect.stringContaining('ZONE_NOT_CALIBRATED'), timestamp: 1_000 },
         },
       ]);
       expect(store.getState().status.error).toContain('RIGHT');
@@ -461,7 +463,7 @@ describe('createCameraService', () => {
     });
 
     it('acepta el bus de la app (AppEventMap) y los suscriptores reciben los eventos', async () => {
-      const appBus = createEventBus<AppBusEventMap>();
+      const appBus = createEventBus<AppEventMap>();
       const store = createCameraStore(ZONES_SETTINGS);
       const service = createCameraService({
         bus: appBus,

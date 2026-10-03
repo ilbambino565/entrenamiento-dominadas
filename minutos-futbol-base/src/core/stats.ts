@@ -25,8 +25,6 @@ export interface MatchSummary {
   maxMs: number;
   minMs: number;
   avgMs: number;
-  /** `playedMs` en el mismo orden que `players`. */
-  distribution: number[];
 }
 
 export function summarizeMatch(state: MatchState, now: number): MatchSummary {
@@ -48,15 +46,14 @@ export function summarizeMatch(state: MatchState, now: number): MatchSummary {
       onFieldNow: p?.location === 'FIELD',
     };
   });
-  const distribution = players.map((p) => p.playedMs);
-  const total = distribution.reduce((acc, ms) => acc + ms, 0);
+  const minutes = players.map((p) => p.playedMs);
+  const total = minutes.reduce((acc, ms) => acc + ms, 0);
   return {
     clockMs,
     players,
-    maxMs: distribution.length ? Math.max(...distribution) : 0,
-    minMs: distribution.length ? Math.min(...distribution) : 0,
-    avgMs: distribution.length ? total / distribution.length : 0,
-    distribution,
+    maxMs: minutes.length ? Math.max(...minutes) : 0,
+    minMs: minutes.length ? Math.min(...minutes) : 0,
+    avgMs: minutes.length ? total / minutes.length : 0,
   };
 }
 

@@ -1,5 +1,6 @@
 import {
   ALL_CAMERA_ZONES,
+  CAMERA_DEVICE_TYPES,
   CAMERA_MODES,
   DEFAULT_CAMERA_SETTINGS,
   type CameraDeviceType,
@@ -18,8 +19,6 @@ import {
  * se entienda se sustituye por el valor por defecto, campo a campo, sin tirar
  * el resto de la configuración.
  */
-
-const CAMERA_DEVICE_TYPES: readonly CameraDeviceType[] = ['dummy', 'dji_rsc2', 'sony_a6600', 'network'];
 
 function isCameraMode(value: unknown): value is CameraMode {
   return typeof value === 'string' && (CAMERA_MODES as readonly string[]).includes(value);

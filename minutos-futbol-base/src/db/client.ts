@@ -2,8 +2,6 @@ import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 import { DB_PRAGMAS } from './schema';
 import { migrate } from './migrate';
 
-export { migrate } from './migrate';
-
 export const DEFAULT_DATABASE_NAME = 'minutos-futbol-base.db';
 
 /**

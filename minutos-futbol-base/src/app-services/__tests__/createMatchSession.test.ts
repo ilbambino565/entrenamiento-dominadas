@@ -181,8 +181,10 @@ describe('createMatchSession', () => {
       expect(session.cameraStore.getState()).toMatchObject({ controllerAttached: false, available: false });
       expect(await session.camera.startRecording()).toBe(false);
       await settle();
-      // La grabación se cerró al desconectar, pero el puente ya no escuchaba.
-      expect(session.engine.getTimeline()).toHaveLength(before);
+      // La grabación se cerró al desconectar y el puente seguía escuchando: la timeline la cierra.
+      const timeline = session.engine.getTimeline();
+      expect(timeline).toHaveLength(before + 1);
+      expect(timeline[timeline.length - 1]?.type).toBe('CAMERA_RECORDING_STOPPED');
       // El motor sigue vivo: la timeline no es cosa de la cámara.
       clock.set(T0 + MINUTE);
       await session.engine.pause();

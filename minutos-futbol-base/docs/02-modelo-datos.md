@@ -15,10 +15,12 @@ Season 1───* Training 1───* Attendance *───1 Player          (
 ## 2.2 Decisiones clave
 
 1. **`MatchEvent` es la fuente de verdad del partido.** `PlayerInterval` y
-   `ClockSegment` se guardan materializados (para consultar y para las
-   estadísticas de temporada), pero se pueden **regenerar** siempre a partir de los
-   eventos no anulados. Esto cumple el requisito: los minutos se recalculan desde
-   los intervalos y nunca existe un contador final como verdad.
+   `ClockSegment` se **regeneran** siempre a partir de los eventos no anulados.
+   En el esquema v1 solo se persiste `match_event` (más los campos derivados
+   `match_time_ms` / `period`, que `load()` comprueba y repara al abrir); las
+   tablas materializadas `clock_segment` y `player_interval` llegan en el hito
+   M2 para las consultas de temporada. Esto cumple el requisito: los minutos se
+   recalculan desde los intervalos y nunca existe un contador final como verdad.
 2. **`ClockSegment`** es una entidad añadida a las pedidas. Representa los tramos
    en los que el reloj del partido está en marcha. Sin ella, una pausa obligaría a
    cortar y reabrir los intervalos de todos los jugadores. Con ella, el intervalo
@@ -161,7 +163,8 @@ CREATE UNIQUE INDEX uq_open_interval ON player_interval(match_id, player_id)
   WHERE ended_at IS NULL;
 
 CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
--- schema_version, last_clock_seen (detección de saltos de reloj), etc.
+-- last_clock_seen (detección de saltos de reloj), etc. La versión del esquema
+-- vive en PRAGMA user_version (transaccional con el DDL).
 ```
 
 ### Fase 2 (definidas, no implementadas)
@@ -206,7 +209,7 @@ Los jugadores implicados van siempre en `player_id` / `secondary_player_id`;
 | `GOALKEEPER_SET` | jugador / — | `{}` | Cambio de portero (prepara minutos como portero) |
 | `PLAYER_ADDED` | jugador / — | `{}` | Llega tarde: se añade al banquillo |
 | `PLAYER_UNAVAILABLE` | jugador / — | `{ unavailable, reason }` | Marcador visual (lesión, expulsión) |
-| `GOAL` `ASSIST` `YELLOW_CARD` `RED_CARD` | jugador / — | `{}` | Fase 2. No afectan a los minutos |
+| `GOAL` `ASSIST` `YELLOW_CARD` `RED_CARD` | jugador / — | `GOAL: { ownGoal? }`, resto `{}` | Fase 2. No afectan a los minutos |
 | `CAMERA_RECORDING_STARTED` | — | `{ recordingId, deviceType }` | Origen del offset de vídeo |
 | `CAMERA_RECORDING_PAUSED` `_RESUMED` `_STOPPED` | — | `{ recordingId }` | Cámara. No afectan a los minutos |
 | `CAMERA_ZONE_CHANGED` | — | `{ zone, previousZone }` | Cámara (modo zonas futuro) |

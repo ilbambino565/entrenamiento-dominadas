@@ -79,5 +79,4 @@ export type MatchRuleErrorCode =
   | 'FIELD_FULL'
   | 'INVALID_POSITION'
   | 'INVALID_EVENT'
-  | 'TIMESTAMP_BEFORE_PREVIOUS'
   | 'NO_MORE_PERIODS';

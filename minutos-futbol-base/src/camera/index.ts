@@ -13,10 +13,5 @@ export {
   type CameraStoreActions,
   type CameraStoreState,
 } from './cameraStore';
-export {
-  createCameraService,
-  type CameraBusEventMap,
-  type CameraService,
-  type CameraServiceDeps,
-} from './cameraService';
-export { createCameraAutomation, type AppBusEventMap } from './automation';
+export { createCameraService, type CameraService, type CameraServiceDeps } from './cameraService';
+export { createCameraAutomation, type ClockBusEventMap } from './automation';

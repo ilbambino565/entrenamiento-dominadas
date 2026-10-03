@@ -1,9 +1,12 @@
 import type { EventBus } from '../events/bus';
-import type { AppEventMap } from '../events/topics';
+import type { MatchBusEventMap } from '../events/topics';
 import type { CameraService } from './cameraService';
 
-/** Mismo motivo que `CameraBusEventMap`: `AppEventMap` es una intersección de interfaces. */
-export type AppBusEventMap = { [K in keyof AppEventMap]: AppEventMap[K] };
+/** Solo los temas del reloj que usa: un bus con más temas (el de la app) también sirve. */
+export type ClockBusEventMap = Pick<
+  MatchBusEventMap,
+  'match.started' | 'match.halftime' | 'match.period.started' | 'match.finished'
+>;
 
 /**
  * AUTOMATIZACIÓN DE LA GRABACIÓN SEGÚN EL RELOJ DEL PARTIDO.
@@ -16,19 +19,21 @@ export type AppBusEventMap = { [K in keyof AppEventMap]: AppEventMap[K] };
  * invocarla en la composición de la sesión del partido (createMatchSession):
  *
  *   match.started         → startRecording()
- *   match.halftime        → pauseRecording()
- *   match.period.started  → resumeRecording()
+ *   match.halftime        → pauseRecording()   (sin capacidad de pausa: stopRecording)
+ *   match.period.started  → resumeRecording()  (sin capacidad de pausa: startRecording)
  *   match.finished        → stopRecording()
  *
  * No conoce al MatchEngine: solo escucha el bus. Y como las operaciones del
  * servicio nunca lanzan ni bloquean, el reloj del partido no depende de la
  * cámara en ningún caso.
  */
-export function createCameraAutomation(bus: EventBus<AppBusEventMap>, service: CameraService): () => void {
+export function createCameraAutomation(bus: EventBus<ClockBusEventMap>, service: CameraService): () => void {
+  const canPause = (): boolean => service.getCapabilities()?.pause ?? true;
+
   const subscriptions = [
     bus.on('match.started', () => void service.startRecording()),
-    bus.on('match.halftime', () => void service.pauseRecording()),
-    bus.on('match.period.started', () => void service.resumeRecording()),
+    bus.on('match.halftime', () => void (canPause() ? service.pauseRecording() : service.stopRecording())),
+    bus.on('match.period.started', () => void (canPause() ? service.resumeRecording() : service.startRecording())),
     bus.on('match.finished', () => void service.stopRecording()),
   ];
 

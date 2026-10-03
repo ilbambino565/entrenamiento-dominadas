@@ -1,3 +1,4 @@
+import type { DerivedFieldsUpdate } from '../core/derive';
 import type { MatchEvent } from '../core/events';
 
 /**
@@ -34,11 +35,8 @@ export interface EventStore {
   lastSeq(matchId: string): Promise<number>;
 }
 
-export interface DerivedEventFields {
-  id: string;
-  matchTimeMs: number;
-  period: number;
-}
+/** Lo que produce `changedDerivedFields` (core) se persiste tal cual. */
+export type DerivedEventFields = DerivedFieldsUpdate;
 
 export class EventStoreError extends Error {
   constructor(

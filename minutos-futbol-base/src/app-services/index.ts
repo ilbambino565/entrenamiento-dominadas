@@ -2,7 +2,6 @@
 export {
   createMatchEngine,
   type AppBus,
-  type AppBusEventMap,
   type MatchEngine,
   type MatchEngineDeps,
   type MatchStateListener,

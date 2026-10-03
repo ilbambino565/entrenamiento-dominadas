@@ -1,3 +1,4 @@
+import type { AppEventMap } from '../../events/topics';
 import fc from 'fast-check';
 import { createDummyCameraController, type CameraSettings } from '../../camera';
 import {
@@ -20,7 +21,7 @@ import { createInMemoryEventStore, createSqliteEventStore, migrate, type EventSt
 import { createNodeSqliteDouble, describeWithSqlite, openMemoryDatabase, type NodeSqliteDatabase } from '../../db/__tests__/nodeSqlite';
 import { createEventBus } from '../../events/bus';
 import { createMatchSession } from '../createMatchSession';
-import { createMatchEngine, type AppBusEventMap } from '../matchEngine';
+import { createMatchEngine } from '../matchEngine';
 
 /**
  * REVISIÓN: la timeline como base de la sincronización con vídeo y de la
@@ -332,7 +333,7 @@ type Cmd = () => Promise<unknown>;
 function engineSetup() {
   const clock = clockAndIds();
   const store = createInMemoryEventStore();
-  const bus = createEventBus<AppBusEventMap>();
+  const bus = createEventBus<AppEventMap>();
   const substituted: { inPlayerId: string; outPlayerId: string }[] = [];
   const undoneOnBus: MatchEvent[] = [];
   bus.on('player.substituted', (p) => substituted.push({ inPlayerId: p.inPlayerId, outPlayerId: p.outPlayerId }));
@@ -370,11 +371,11 @@ function applicableCommands(engine: ReturnType<typeof engineSetup>['engine'], t:
     engine.recordExternalEvent({ type: 'CAMERA_RECORDING_STARTED', timestamp: t, source: 'camera', metadata: { recordingId: `rec-${t}`, deviceType: 'dummy' } }),
   );
   // Deshacer con peso: es el centro de esta propiedad.
-  if (engine.canUndo()) cmds.push(() => engine.undo(t), () => engine.undo(t));
+  if ((engine.peekUndo() !== null)) cmds.push(() => engine.undo(t), () => engine.undo(t));
   if (status === 'FINISHED') return cmds;
 
-  if (bench.length && !full) cmds.push(() => engine.playerIn(choose(bench), pos(field.length), t));
-  if (field.length) cmds.push(() => engine.playerOut(choose(field), t));
+  if (bench.length && !full) cmds.push(() => engine.enterPlayer(choose(bench), pos(field.length), t));
+  if (field.length) cmds.push(() => engine.leavePlayer(choose(field), t));
   if (bench.length && field.length) cmds.push(() => engine.substitute(choose(bench), choose(field, 3), undefined, t));
   if (field.length) cmds.push(() => engine.movePlayer(choose(field), pos(who % 10), t));
   if (field.length >= 2) {
@@ -463,7 +464,7 @@ describe('review-timeline: propiedad de integridad de la timeline con deshacer',
         const voided = s.engine.getEvents().filter((e) => e.voidedAt != null).sort((a, b) => a.voidedAt! - b.voidedAt! || b.seq - a.seq);
         expect(s.undoneOnBus.map((e) => e.id)).toEqual(voided.map((e) => e.id));
         // Un segundo motor sobre el mismo almacén ve lo mismo.
-        const second = createMatchEngine({ config: f7Config(), store: s.store, bus: createEventBus<AppBusEventMap>(), now: s.clock.now });
+        const second = createMatchEngine({ config: f7Config(), store: s.store, bus: createEventBus<AppEventMap>(), now: s.clock.now });
         expect(await second.load()).toEqual(s.engine.getState());
         expect(second.getEvents()).toStrictEqual(s.engine.getEvents());
       }),
@@ -544,10 +545,10 @@ describe('review-timeline: corregir el timestamp de un evento y regenerar', () =
   });
 });
 
-// ───────────────────────── 4. HALLAZGOS (fallan a propósito) ─────────────────────────
+// ───────────────────────── 4. Rutas de fallo del deshacer y entradas inválidas ─────────────────────────
 
-describe('review-timeline: HALLAZGOS', () => {
-  it('BUG: si falla el append de EVENT_UNDONE, undo() rechaza aunque el deshacer YA se aplicó, nadie es notificado y un reintento desharía OTRO evento', async () => {
+describe('deshacer: rutas de fallo', () => {
+  it('si falla el append de EVENT_UNDONE, undo() resuelve igualmente: el deshacer ya se aplicó, se notifica y la pila es coherente', async () => {
     const s = engineSetup();
     await s.engine.load();
     await s.engine.setLineup(lineup(FIELD), [...SUBS]);
@@ -556,6 +557,7 @@ describe('review-timeline: HALLAZGOS', () => {
     const sub = await s.engine.substitute('hugo', 'lucas');
     const listener = jest.fn();
     s.engine.subscribe(listener);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const realAppend = s.store.append;
     s.store.append = async (e) => {
@@ -563,24 +565,22 @@ describe('review-timeline: HALLAZGOS', () => {
       return realAppend(e);
     };
     s.clock.set(T0 + 11 * MINUTE);
-    const outcome = await s.engine.undo().then(
-      () => 'resuelto',
-      () => 'rechazado',
-    );
+    const undone = await s.engine.undo();
     s.store.append = realAppend;
+    warn.mockRestore();
 
-    // Hechos: el cambio está anulado en disco y en memoria...
-    expect((await s.store.loadEvents(MATCH_ID)).find((e) => e.id === sub.id)?.voidedAt).toBe(T0 + 11 * MINUTE);
+    expect(undone?.id).toBe(sub.id);
+    expect(listener).toHaveBeenCalled();
+    // El cambio está anulado en disco y en memoria, sin rastro EVENT_UNDONE (es informativo)...
+    const stored = await s.store.loadEvents(MATCH_ID);
+    expect(stored.find((e) => e.id === sub.id)?.voidedAt).toBe(T0 + 11 * MINUTE);
+    expect(stored.some((e) => e.type === 'EVENT_UNDONE')).toBe(false);
     expect(s.engine.getState().players.hugo?.location).toBe('BENCH');
-    // ...y la pila ya apunta al evento anterior: si la UI reintenta tras el "error", deshace MATCH_STARTED.
+    // ...y lo siguiente que se desharía es, correctamente, el pitido inicial.
     expect(s.engine.peekUndo()?.type).toBe('MATCH_STARTED');
-
-    // Lo que debería pasar: o bien la promesa resuelve (el deshacer se hizo), o bien al menos
-    // los suscriptores reciben el estado nuevo. Hoy no ocurre ninguna de las dos cosas.
-    expect({ outcome, notified: listener.mock.calls.length > 0 }).toEqual({ outcome: 'resuelto', notified: true });
   });
 
-  it('BUG: load() no repara matchTimeMs/period obsoletos (crash entre markVoided y updateDerived): la timeline cargada contradice a deriveEventFields', async () => {
+  it('load() repara matchTimeMs/period obsoletos (cierre entre markVoided y updateDerived)', async () => {
     const s = engineSetup();
     await s.engine.load();
     await s.engine.setLineup(lineup(FIELD), [...SUBS]);
@@ -598,19 +598,19 @@ describe('review-timeline: HALLAZGOS', () => {
     // Crash justo después del paso 1 de undo(): el anulado está en disco, los derivados no se reescribieron.
     await s.store.markVoided(MATCH_ID, pause.id, T0 + 14 * MINUTE);
 
-    const second = createMatchEngine({ config: f7Config(), store: s.store, bus: createEventBus<AppBusEventMap>(), now: s.clock.now });
+    const second = createMatchEngine({ config: f7Config(), store: s.store, bus: createEventBus<AppEventMap>(), now: s.clock.now });
     await second.load();
-    // El estado se regenera bien (gana el log)...
+    // El estado se regenera (gana el log) y la timeline expuesta y la persistida
+    // llevan el minuto recalculado del evento de cámara (13:00, no 12:00).
     expect(second.getState().status).toBe('RUNNING');
-    // ...pero la timeline expuesta/exportada conserva el minuto antiguo del evento de cámara
-    // (12:00 en vez de 13:00) y nada lo corrige hasta que otro deshacer toque esos campos.
     const loaded = second.getEvents().find((e) => e.id === camera.id)!;
     const fresh = deriveEventFields(second.getEvents()).find((e) => e.id === camera.id)!;
     expect(fresh.matchTimeMs).toBe(13 * MINUTE);
     expect(loaded.matchTimeMs).toBe(fresh.matchTimeMs);
+    expect((await s.store.loadEvents(MATCH_ID)).find((e) => e.id === camera.id)?.matchTimeMs).toBe(13 * MINUTE);
   });
 
-  it('BUG: un timestamp NaN se acepta como instante de un comando y contamina el reloj (y se persiste como null en memoria)', async () => {
+  it('un timestamp no finito (NaN) se rechaza como comando inválido y no toca el reloj ni el almacén', async () => {
     const s = engineSetup();
     await s.engine.load();
     await s.engine.setLineup(lineup(FIELD), [...SUBS]);
@@ -623,7 +623,6 @@ describe('review-timeline: HALLAZGOS', () => {
     );
     const clock = s.engine.clockMs(T0 + 6 * MINUTE);
     const stored = (await s.store.loadEvents(MATCH_ID)).find((e) => e.type === 'MATCH_PAUSED');
-    // Hoy: "aceptado ts=NaN matchTimeMs=NaN", clockMs NaN y timestamp null en el almacén.
     expect({ outcome, clockIsFinite: Number.isFinite(clock), storedTimestamp: stored === undefined ? 'no persistido' : stored.timestamp }).toEqual({
       outcome: expect.stringMatching(/^rechazado/),
       clockIsFinite: true,

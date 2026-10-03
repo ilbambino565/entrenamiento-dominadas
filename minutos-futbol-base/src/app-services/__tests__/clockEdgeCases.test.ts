@@ -1,8 +1,9 @@
+import type { AppEventMap } from '../../events/topics';
 import { checkInvariants, formatClock, type LineupEntry } from '../../core';
 import { MINUTE, SECOND, T0, f7Config, pos } from '../../core/__tests__/helpers';
 import { createInMemoryEventStore } from '../../db';
 import { createEventBus } from '../../events/bus';
-import { createMatchEngine, type AppBusEventMap } from '../matchEngine';
+import { createMatchEngine } from '../matchEngine';
 
 /**
  * Revisión de la dimensión "cálculo de tiempos" en la fachada: casos límite de
@@ -24,7 +25,7 @@ function setup() {
   const engine = createMatchEngine({
     config: f7Config(),
     store,
-    bus: createEventBus<AppBusEventMap>(),
+    bus: createEventBus<AppEventMap>(),
     now: clock.now,
     newId: () => `evt-${String(++n).padStart(3, '0')}`,
   });

@@ -4,7 +4,6 @@ import {
   fromMatchTimeMs,
   matchClockMs,
   overlapMs,
-  periodAt,
   periodClockMs,
   playedMs,
   playedShare,
@@ -161,17 +160,6 @@ describe('toMatchTimeMs y fromMatchTimeMs', () => {
   });
 });
 
-describe('periodAt', () => {
-  const segments = [seg(1, 0, 25 * MINUTE), seg(2, 35 * MINUTE, null)];
-
-  it('da el periodo del último segmento iniciado en o antes del instante', () => {
-    expect(periodAt(segments, at(-1))).toBe(0);
-    expect(periodAt(segments, at(0))).toBe(1);
-    expect(periodAt(segments, at(30 * MINUTE))).toBe(1);
-    expect(periodAt(segments, at(35 * MINUTE))).toBe(2);
-    expect(periodAt([], at(0))).toBe(0);
-  });
-});
 
 describe('playedShare', () => {
   it('es 0 sin reloj y se acota a 0..1', () => {

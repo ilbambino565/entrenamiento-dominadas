@@ -1,9 +1,10 @@
+import type { AppEventMap } from '../../events/topics';
 import { checkInvariants, deriveEventFields, reduceMatch, type LineupEntry } from '../../core';
 import { F7_SQUAD, MINUTE, T0, f7Config, pos } from '../../core/__tests__/helpers';
 import { EventStoreError, createInMemoryEventStore, createSqliteEventStore, migrate, type EventStore } from '../../db';
 import { createNodeSqliteDouble, describeWithSqlite, openMemoryDatabase, type NodeSqliteDatabase } from '../../db/__tests__/nodeSqlite';
 import { createEventBus } from '../../events/bus';
-import { createMatchEngine, type AppBusEventMap } from '../matchEngine';
+import { createMatchEngine } from '../matchEngine';
 
 /**
  * REVISIÓN (durabilidad y recuperación) del MatchEngine sobre el EventStore.
@@ -33,7 +34,7 @@ function setup(store: EventStore = createInMemoryEventStore()) {
   let t = T0;
   const clock = { now: () => t, set: (ms: number) => void (t = ms) };
   let n = 0;
-  const bus = createEventBus<AppBusEventMap>();
+  const bus = createEventBus<AppEventMap>();
   const engine = createMatchEngine({
     config: f7Config(),
     store,
@@ -55,7 +56,7 @@ async function kickoff(store?: EventStore) {
 }
 
 const secondEngine = (store: EventStore, now: () => number) =>
-  createMatchEngine({ config: f7Config(), store, bus: createEventBus<AppBusEventMap>(), now });
+  createMatchEngine({ config: f7Config(), store, bus: createEventBus<AppEventMap>(), now });
 
 // ───────────────────────── 1 y 2. Sobre SQLite real ─────────────────────────
 
@@ -101,9 +102,11 @@ describeWithSqlite('review-durabilidad: MatchEngine sobre SQLite real', () => {
       'recorded seq 2 con 2 filas',
       'estado 3 con 3 filas',
       'recorded seq 3 con 3 filas',
-      // deshacer: el EVENT_UNDONE (seq 4) ya está escrito cuando se notifica, y la pausa ya anulada.
-      'estado 4 con 4 filas',
+      // deshacer: se notifica en cuanto la pausa está anulada en disco (todavía 3 filas),
+      // y el rastro EVENT_UNDONE (seq 4) ya está escrito cuando llega su propio aviso.
+      'estado 3 con 3 filas',
       'undone anulado en disco: true',
+      'estado 4 con 4 filas',
       'recorded seq 4 con 4 filas',
     ]);
   });
@@ -117,7 +120,7 @@ describeWithSqlite('review-durabilidad: MatchEngine sobre SQLite real', () => {
     s.clock.set(T0 + 14 * MINUTE);
     await s.engine.resume();
     s.clock.set(T0 + 16 * MINUTE);
-    await s.engine.playerOut('marco'); // quedan 6 en el campo, intervalo de Marco cerrado
+    await s.engine.leavePlayer('marco'); // quedan 6 en el campo, intervalo de Marco cerrado
 
     // "Muere el proceso": el primer motor no vuelve a usarse. Se abre otro sobre el mismo archivo.
     const second = secondEngine(store, s.clock.now);
@@ -144,7 +147,7 @@ describeWithSqlite('review-durabilidad: MatchEngine sobre SQLite real', () => {
     for (const id of F7_SQUAD) expect(second.playedMs(id, later)).toBe(s.engine.playedMs(id, later));
 
     // Y continúa el partido donde estaba, sin huecos en seq.
-    const entered = await second.playerIn('david', pos(6), later);
+    const entered = await second.enterPlayer('david', pos(6), later);
     expect(entered.seq).toBe(7);
     expect(second.playedMs('david', later + 5 * MINUTE)).toBe(5 * MINUTE);
     expect(checkInvariants(second.getState())).toEqual([]);
@@ -255,8 +258,8 @@ describe('review-durabilidad: errores del almacén', () => {
 
 // ───────────────────────── 5. Cola serie ─────────────────────────
 
-describe('review-durabilidad: cola serie', () => {
-  it('OBSERVACIÓN: undo() no acepta el objetivo esperado; con un comando en vuelo anula un evento distinto del que mostraba peekUndo()', async () => {
+describe('cola serie y deshacer', () => {
+  it('undo(expectedTargetId) rechaza si entre tanto entró otro gesto: nunca se deshace algo distinto de lo que mostraba el botón', async () => {
     const s = await kickoff();
     s.clock.set(T0 + 10 * MINUTE);
     // Lo que el botón DESHACER está mostrando ("↶ INICIO").
@@ -265,28 +268,26 @@ describe('review-durabilidad: cola serie', () => {
     // Un gesto de cambio que acaba de soltarse y aún no ha confirmado...
     const inFlight = s.engine.substitute('hugo', 'lucas');
     // ...y la pulsación de DESHACER que llega detrás, con el botón todavía en "↶ INICIO".
-    const undone = await s.engine.undo();
+    const attempt = s.engine.undo(undefined, shown?.id);
     const sub = await inFlight;
 
-    // La cola serie evita la carrera de datos (nada se corrompe)...
+    await expect(attempt).rejects.toMatchObject({ name: 'MatchRuleError', code: 'INVALID_EVENT' });
+    // Nada se anuló: la sustitución sigue vigente y disco == memoria.
+    expect((await s.store.loadEvents(MATCH_ID)).every((e) => e.voidedAt === null)).toBe(true);
+    expect(s.engine.peekUndo()?.id).toBe(sub.id);
     expect(checkInvariants(s.engine.getState())).toEqual([]);
-    expect(await s.store.loadEvents(MATCH_ID)).toStrictEqual([...s.engine.getEvents()]);
-    // ...pero lo anulado es la sustitución, no lo que el usuario veía que iba a deshacer.
+    // Sin objetivo esperado se deshace lo último, que ahora sí es la sustitución.
+    const undone = await s.engine.undo();
     expect(undone?.id).toBe(sub.id);
-    expect(undone?.id).not.toBe(shown?.id);
     expect(s.engine.getState().status).toBe('RUNNING');
   });
-});
 
-// ───────────────────────── 6. HALLAZGO (falla a propósito) ─────────────────────────
-
-describe('review-durabilidad: HALLAZGOS', () => {
-  it('BUG: si updateDerived falla tras markVoided, la memoria sigue aplicando el evento anulado; el siguiente comando se valida contra ese estado falso, se persiste, y el partido ya no vuelve a cargar', async () => {
+  it('si updateDerived falla tras markVoided, el deshacer ya es un hecho: memoria == disco, se avisa y el partido vuelve a cargar', async () => {
     const s = await kickoff();
     s.clock.set(T0 + 12 * MINUTE);
     const pause = await s.engine.pause();
     // Un evento posterior cuyo minuto cambia al anular la pausa: obliga a llamar a updateDerived.
-    await s.engine.recordExternalEvent({
+    const camera = await s.engine.recordExternalEvent({
       type: 'CAMERA_RECORDING_STARTED',
       timestamp: T0 + 13 * MINUTE,
       source: 'camera',
@@ -294,45 +295,36 @@ describe('review-durabilidad: HALLAZGOS', () => {
     });
     const listener = jest.fn();
     s.engine.subscribe(listener);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const realUpdateDerived = s.store.updateDerived;
     s.store.updateDerived = async () => {
       throw new EventStoreError('STORAGE', 'updateDerived: disk I/O error');
     };
     s.clock.set(T0 + 14 * MINUTE);
-    await expect(s.engine.undo()).rejects.toBeInstanceOf(EventStoreError);
+    const undone = await s.engine.undo();
     s.store.updateDerived = realUpdateDerived;
 
-    // Hechos: en disco la pausa YA está anulada (el log dice que el reloj corre desde las 12:00)...
+    expect(undone?.id).toBe(pause.id);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+
+    // En disco la pausa está anulada y la memoria dice lo mismo que el disco (y avisó).
     const stored = await s.store.loadEvents(MATCH_ID);
     expect(stored.find((e) => e.id === pause.id)?.voidedAt).toBe(T0 + 14 * MINUTE);
-    const diskState = reduceMatch(f7Config(), stored);
-    expect(diskState.status).toBe('RUNNING');
-    // ...mientras que en memoria la pausa sigue vigente (PAUSED) y nadie ha sido avisado.
-    const memoryStatus = s.engine.getState().status;
-    const notifiedAfterUndo = listener.mock.calls.length > 0;
+    expect(s.engine.getState().status).toBe(reduceMatch(f7Config(), stored).status);
+    expect(s.engine.getState().status).toBe('RUNNING');
+    expect(listener).toHaveBeenCalled();
+    // Los derivados no se pudieron reescribir: la memoria conserva los del disco (12:00), no miente.
+    expect(s.engine.getEvents().find((e) => e.id === camera.id)?.matchTimeMs).toBe(12 * MINUTE);
 
-    // Consecuencia: REANUDAR es válido contra la memoria y se persiste con seq 5...
+    // El siguiente comando es válido y, al reabrir, load() repara los derivados.
     s.clock.set(T0 + 15 * MINUTE);
-    const resumed = await s.engine.resume().then(
-      (e) => `persistido seq ${e.seq}`,
-      (e: Error) => `rechazado: ${e.message}`,
-    );
-    // ...y al reabrir el partido el log [.., PAUSED(anulado), CAMERA, RESUMED] ya no se puede aplicar.
+    await s.engine.pause();
     const second = secondEngine(s.store, s.clock.now);
-    const reload = await second.load().then(
-      () => 'ok',
-      (e: Error) => `rechazado: ${e.name}: ${e.message}`,
-    );
-
-    // Lo que debería cumplirse: memoria == regenerar(disco) tras un fallo (y avisar), y el
-    // partido siempre recargable. Hoy: PAUSED en memoria, sin aviso, RESUMED persistido y
-    // load() rechazado con MatchRuleError.
-    expect({ memoryStatus, notifiedAfterUndo, resumed, reload }).toEqual({
-      memoryStatus: diskState.status,
-      notifiedAfterUndo: true,
-      resumed: expect.any(String),
-      reload: 'ok',
-    });
+    await second.load();
+    expect(second.getState().status).toBe('PAUSED');
+    expect(second.getEvents().find((e) => e.id === camera.id)?.matchTimeMs).toBe(13 * MINUTE);
+    expect((await s.store.loadEvents(MATCH_ID)).find((e) => e.id === camera.id)?.matchTimeMs).toBe(13 * MINUTE);
   });
 });

@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Datos personales de menores: nunca en el repositorio
+assets/private/

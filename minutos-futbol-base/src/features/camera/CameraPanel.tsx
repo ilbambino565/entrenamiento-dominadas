@@ -85,11 +85,17 @@ function PanelButton({ label, testID, disabled, active = false, onPress }: Panel
 
 export function CameraPanel({ store, service, visible = FEATURE_FLAGS.cameraPanel }: CameraPanelProps) {
   // El hook va antes del return condicional: el orden de hooks no puede depender de `visible`.
-  const { settings, status, available } = useCameraState(store, (state) => state);
+  const { settings, status, available, capabilities } = useCameraState(store, (state) => state);
   if (!visible) return null;
 
   const external = settings.mode === 'external';
-  const zonesEnabled = available && settings.mode === 'zones';
+  // Solo se ofrece lo que el dispositivo sabe hacer: un gimbal no graba y una
+  // cámara no se mueve. Mejor un botón apagado que un error al pulsar.
+  const canPan = available && capabilities?.pan === true;
+  const canRecord = available && capabilities?.record === true;
+  const canPause = canRecord && capabilities?.pause === true;
+  const canZoom = available && capabilities?.zoom === true;
+  const zonesEnabled = canPan && settings.mode === 'zones';
   const idle = status.recording === 'idle';
   const paused = status.recording === 'paused';
 
@@ -129,19 +135,19 @@ export function CameraPanel({ store, service, visible = FEATURE_FLAGS.cameraPane
         <PanelButton
           testID="camera-rec"
           label="REC"
-          disabled={!available || !idle}
+          disabled={!canRecord || !idle}
           onPress={() => void service.startRecording()}
         />
         <PanelButton
           testID="camera-pause"
           label={paused ? 'REANUDAR' : 'PAUSA'}
-          disabled={!available || idle}
+          disabled={!canPause || idle}
           onPress={() => void (paused ? service.resumeRecording() : service.pauseRecording())}
         />
         <PanelButton
           testID="camera-stop"
           label="STOP"
-          disabled={!available || idle}
+          disabled={!canRecord || idle}
           onPress={() => void service.stopRecording()}
         />
       </View>
@@ -149,11 +155,11 @@ export function CameraPanel({ store, service, visible = FEATURE_FLAGS.cameraPane
       <View style={styles.row}>
         {settings.zoomEnabled && (
           <>
-            <PanelButton testID="camera-zoom-out" label="ZOOM −" disabled={!available} onPress={() => void service.zoomOut()} />
-            <PanelButton testID="camera-zoom-in" label="ZOOM +" disabled={!available} onPress={() => void service.zoomIn()} />
+            <PanelButton testID="camera-zoom-out" label="ZOOM −" disabled={!canZoom} onPress={() => void service.zoomOut()} />
+            <PanelButton testID="camera-zoom-in" label="ZOOM +" disabled={!canZoom} onPress={() => void service.zoomIn()} />
           </>
         )}
-        <PanelButton testID="camera-recenter" label="RECENTER" disabled={!available} onPress={() => void service.recenter()} />
+        <PanelButton testID="camera-recenter" label="RECENTER" disabled={!canPan} onPress={() => void service.recenter()} />
       </View>
     </View>
   );

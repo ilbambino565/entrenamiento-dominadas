@@ -18,7 +18,7 @@ Lo que había diseñado encajaba bien con lo pedido:
 |--------|--------------------------|--------|
 | Timeline con timestamp preciso | `match_event` append-only con `ts` epoch ms | Se añaden `match_time_ms`, `period`, `player_id`, `secondary_player_id` como columnas; `payload` pasa a llamarse `metadata` |
 | Modelo genérico de eventos | Sí (`type` + `payload`) | Se alinean los nombres a los pedidos (`MATCH_STARTED`, `PLAYER_ENTERED`...) |
-| Separación MatchEngine / PlayerTimeTracker / EventTimeline | Capas aplicación / dominio / persistencia | Se nombran así los módulos |
+| Separación MatchEngine / PlayerTimeTracker / EventTimeline | Capas aplicación / dominio / persistencia | MatchEngine = `core/reducer.ts` (puro) + `app-services/matchEngine.ts` (fachada); PlayerTimeTracker = `core/time.ts`; EventTimeline = `core/events.ts` + `db/` |
 | EventBus | No existía (el store de Zustand hacía de notificador) | Se añade `src/events` |
 | CameraController, CameraState, CameraPanel, cameraSettings | No existía | Se añade `src/camera` y `src/features/camera` |
 | Tablet | Diseño móvil "una mano" | Se anota: mismo diseño, más espacio; sin rediseñar ahora |
@@ -28,23 +28,25 @@ Lo que había diseñado encajaba bien con lo pedido:
 ```
 src/
 ├── core/            DOMINIO PURO (sin React, sin Expo, sin cámara)
-│   ├── events.ts        Timeline: modelo genérico MatchEvent (EventTimeline, tipos)
+│   ├── events.ts        Timeline: modelo genérico MatchEvent y catálogo de tipos
 │   ├── state.ts         MatchState, ClockSegment, PlayerInterval, MatchRuleError
-│   ├── reducer.ts       MatchEngine (parte pura): eventos → estado
-│   ├── time.ts          PlayerTimeTracker: minutos = intervalos ∩ reloj en marcha
+│   ├── reducer.ts       Parte pura del motor: eventos → estado (con validación)
+│   ├── time.ts          "PlayerTimeTracker": minutos = intervalos ∩ reloj en marcha
 │   ├── derive.ts        Recalcula matchTimeMs/period de cada evento
+│   ├── invariants.ts    Comprobaciones de coherencia del estado
 │   ├── stats.ts         Resumen del partido
 │   └── formats.ts       F7 / F8 / F11
-├── events/          EventBus tipado + catálogo de temas
+├── events/          EventBus tipado (bus.ts) + catálogo de temas (topics.ts)
 ├── camera/          MÓDULO DE CÁMARA (no conoce jugadores ni cronómetro)
-│   ├── types.ts         CameraController, CameraSettings, CameraStatus, CameraEventMap
+│   ├── types.ts         CameraController (+ capabilities), CameraSettings, CameraStatus, CameraEventMap
+│   ├── status.ts        INITIAL_CAMERA_STATUS, cloneCameraStatus
+│   ├── settings.ts      DEFAULT_CAMERA_SETTINGS / normalización
 │   ├── dummyCameraController.ts
 │   ├── cameraStore.ts   CameraState (zustand vanilla)
 │   ├── cameraService.ts Casos de uso: zonas, grabación; publica en el bus
-│   ├── settings.ts      DEFAULT_CAMERA_SETTINGS / normalización
 │   └── automation.ts    match.* → grabación (DORMIDA: no se registra en el MVP)
-├── db/              EventStore (puerto) + InMemory + SQLite (expo-sqlite)
-├── app-services/    MatchEngine (fachada con persistencia y bus) + puentes
+├── db/              EventStore (puerto) + InMemory + SQLite (expo-sqlite) + migraciones SQL
+├── app-services/    Fachada del partido con persistencia y bus + puentes
 │   ├── matchEngine.ts
 │   ├── cameraTimelineBridge.ts   camera.* (bus) → eventos CAMERA_* en la timeline
 │   └── createMatchSession.ts     Composición: engine + cámara + bus
@@ -81,7 +83,15 @@ Fronteras (las comprueba `npm run check:boundaries`):
   timeline sin alterar el estado del partido ni los minutos.
 - **La cámara no sabe que existe el partido.** Publica `camera.*` en el bus.
 - **El puente** (`cameraTimelineBridge`) es la única pieza que conoce a ambos,
-  y son 30 líneas: traduce `camera.record.started` → `CAMERA_RECORDING_STARTED`.
+  y son unas 40 líneas: traduce `camera.record.started` → `CAMERA_RECORDING_STARTED`.
+  Al cerrar la sesión se libera primero la cámara y después el puente, para que
+  una grabación en curso quede cerrada también en la timeline.
+- **Capacidades.** Cada `CameraController` declara `capabilities` (`record`,
+  `pause`, `pan`, `zoom`): un gimbal mueve pero no graba; una cámara graba pero no
+  se mueve ni pausa. El servicio devuelve `false` sin error ante una capacidad
+  ausente, el panel apaga esos botones y la automatización hace STOP + REC en el
+  descanso cuando no hay pausa. Así añadir `DjiCameraController` o
+  `SonyCameraController` no obliga a tocar el panel ni el servicio.
 - **La automatización** (`match.started → startRecording()`) existe como
   función con tests pero **no se registra** en la composición: `autoRecord`
   es `false` y nada la llama.
@@ -144,7 +154,7 @@ Lo que podrá hacerse después **sin cambiar el modelo**:
 
 | Función futura | Fuente de datos |
 |----------------|-----------------|
-| Ir desde la ficha de un jugador a sus momentos | `SELECT * FROM match_event WHERE match_id=? AND (player_id=? OR secondary_player_id=?)` |
+| Ir desde la ficha de un jugador a sus momentos | Eventos con `player_id` o `secondary_player_id` = X **∪** los eventos que referencian sus `PlayerInterval` (`startEventId` / `endEventId`: así entra el pitido inicial de un titular, que no lleva `player_id`) |
 | Clips de goles | Eventos `GOAL` ± N segundos |
 | Ver solo las intervenciones de un jugador | Sus `PlayerInterval` (entrada → salida) convertidos a offsets de vídeo |
 | Highlights / resumen | Lista ordenada de eventos de interés con offsets |
@@ -153,7 +163,15 @@ Lo que podrá hacerse después **sin cambiar el modelo**:
 
 Pendiente (fuera del MVP): entidad `Recording` (`id`, `matchId`, `startedAt`,
 `endedAt`, `fileUri`, `manualOffsetMs`) para enlazar con el archivo de vídeo.
-El evento `CAMERA_RECORDING_STARTED` ya guarda lo necesario para crearla.
+El evento `CAMERA_RECORDING_STARTED` ya guarda lo necesario para crearla. Las
+pausas de grabación (`_PAUSED` / `_RESUMED`) no están en el archivo de vídeo:
+el offset debe descontarlas, y los eventos con `recordingId` lo permiten.
+
+Corrección posterior de un evento (fase 2): cambiar su `timestamp` y regenerar
+recalcula minutos y derivados sin tocar nada más. Regla pendiente de fijar al
+implementarla: si la corrección cruza el orden de `seq` de otro evento, o se
+rechaza o se reordena; `deriveEventFields` mide cada evento solo contra los
+segmentos anteriores a su `seq`.
 
 ## 7.6 Modos de cámara
 
@@ -200,3 +218,13 @@ SDK DJI, Bluetooth, API Sony, streaming, WebRTC, visión artificial, detección
 de balón o jugadores, almacenamiento o edición de vídeo. Ninguna de esas piezas
 requiere cambiar `core`, `db` ni `app-services`: entran como una nueva
 implementación de `CameraController` y, en su momento, una entidad `Recording`.
+
+Tampoco se soporta la web: `expo-sqlite` no ofrece transacciones exclusivas en
+esa plataforma. El objetivo es tablet/móvil (iOS y Android).
+
+## 7.10 Verificación
+
+`npm run verify` ejecuta `tsc`, la comprobación de fronteras y los 400+ tests
+(unitarios, por propiedades con deshacer aleatorio, y de persistencia contra un
+SQLite real vía `node:sqlite`). `npm run test:props` sube las propiedades a
+2 000 ejecuciones cada una (10 000 partidos aleatorios en total).

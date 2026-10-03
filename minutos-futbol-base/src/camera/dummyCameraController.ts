@@ -1,6 +1,13 @@
 import { clampZoom } from './settings';
 import { cloneCameraStatus } from './status';
-import { CameraError, type CameraController, type CameraPosition, type CameraStatus } from './types';
+import {
+  CameraError,
+  FULL_CAMERA_CAPABILITIES,
+  type CameraCapabilities,
+  type CameraController,
+  type CameraPosition,
+  type CameraStatus,
+} from './types';
 
 /**
  * Controlador de cámara simulado.
@@ -19,6 +26,8 @@ export interface DummyCameraControllerOptions {
   initialPosition?: CameraPosition;
   /** Incremento de zoomIn/zoomOut (0..1). Por defecto 0.1. */
   zoomStep?: number;
+  /** Por defecto lo sabe hacer todo; se recorta para simular un gimbal o una cámara. */
+  capabilities?: Partial<CameraCapabilities>;
 }
 
 export interface DummyCameraController extends CameraController {
@@ -38,6 +47,10 @@ export function createDummyCameraController(
   const now = options.now ?? (() => Date.now());
   const latencyMs = Math.max(0, options.latencyMs ?? 0);
   const zoomStep = Number.isFinite(options.zoomStep) ? (options.zoomStep as number) : 0.1;
+  const capabilities: Readonly<CameraCapabilities> = Object.freeze({
+    ...FULL_CAMERA_CAPABILITIES,
+    ...options.capabilities,
+  });
 
   const listeners = new Set<(status: CameraStatus) => void>();
   const history: string[] = [];
@@ -83,6 +96,13 @@ export function createDummyCameraController(
     }
   }
 
+  /** Convención del contrato: fuera de las capacidades → UNSUPPORTED sin cambiar el estado. */
+  function requireCapability(capability: keyof CameraCapabilities, what: string): void {
+    if (!capabilities[capability]) {
+      throw new CameraError('UNSUPPORTED', `Este dispositivo no puede ${what}`);
+    }
+  }
+
   /** `status.zoom` es la verdad; `position.zoom` la refleja para no dar dos valores distintos. */
   function applyZoom(value: number): void {
     // Redondeo a milésimas: evita arrastrar 0.30000000000000004 hasta la pantalla.
@@ -92,6 +112,7 @@ export function createDummyCameraController(
 
   const controller: DummyCameraController = {
     deviceType: 'dummy',
+    capabilities,
 
     async connect() {
       history.push('connect');
@@ -113,6 +134,7 @@ export function createDummyCameraController(
     async startRecording() {
       history.push('startRecording');
       requireConnected();
+      requireCapability('record', 'grabar');
       if (status.recording !== 'idle') {
         throw new CameraError('ALREADY_RECORDING', 'Ya hay una grabación en curso');
       }
@@ -122,6 +144,7 @@ export function createDummyCameraController(
     async pauseRecording() {
       history.push('pauseRecording');
       requireConnected();
+      requireCapability('pause', 'pausar la grabación');
       if (status.recording !== 'recording') {
         throw new CameraError('NOT_RECORDING', 'No hay ninguna grabación que pausar');
       }
@@ -131,6 +154,7 @@ export function createDummyCameraController(
     async resumeRecording() {
       history.push('resumeRecording');
       requireConnected();
+      requireCapability('pause', 'reanudar la grabación');
       if (status.recording !== 'paused') {
         throw new CameraError('NOT_RECORDING', 'No hay ninguna grabación pausada');
       }
@@ -140,6 +164,7 @@ export function createDummyCameraController(
     async stopRecording() {
       history.push('stopRecording');
       requireConnected();
+      requireCapability('record', 'grabar');
       if (status.recording === 'idle') {
         throw new CameraError('NOT_RECORDING', 'No hay ninguna grabación que parar');
       }
@@ -149,24 +174,28 @@ export function createDummyCameraController(
     async panLeft() {
       history.push('panLeft');
       requireConnected();
+      requireCapability('pan', 'moverse');
       update({ panning: 'left' });
     },
 
     async panRight() {
       history.push('panRight');
       requireConnected();
+      requireCapability('pan', 'moverse');
       update({ panning: 'right' });
     },
 
     async stopPan() {
       history.push('stopPan');
       requireConnected();
+      requireCapability('pan', 'moverse');
       update({ panning: null });
     },
 
     async recenter() {
       history.push('recenter');
       requireConnected();
+      requireCapability('pan', 'moverse');
       update({ position: { pan: 0, tilt: 0, zoom: status.zoom }, panning: null });
     },
 
@@ -174,6 +203,7 @@ export function createDummyCameraController(
       // El dummy no anima: solo deja constancia de la transición pedida.
       history.push(`goToPosition(${position.pan},${position.tilt},${transitionMs ?? 0})`);
       requireConnected();
+      requireCapability('pan', 'moverse');
       const zoom = clampZoom(position.zoom ?? status.zoom);
       update({ position: { pan: position.pan, tilt: position.tilt, zoom }, zoom, panning: null });
     },
@@ -181,18 +211,21 @@ export function createDummyCameraController(
     async zoomIn() {
       history.push('zoomIn');
       requireConnected();
+      requireCapability('zoom', 'hacer zoom');
       applyZoom(status.zoom + zoomStep);
     },
 
     async zoomOut() {
       history.push('zoomOut');
       requireConnected();
+      requireCapability('zoom', 'hacer zoom');
       applyZoom(status.zoom - zoomStep);
     },
 
     async setZoom(value) {
       history.push(`setZoom(${value})`);
       requireConnected();
+      requireCapability('zoom', 'hacer zoom');
       if (!Number.isFinite(value)) {
         throw new CameraError('UNSUPPORTED', `Valor de zoom no válido: ${value}`);
       }

@@ -1,9 +1,7 @@
 import { createStore } from 'zustand/vanilla';
 import { isCameraControlAvailable, normalizeCameraSettings } from './settings';
 import { INITIAL_CAMERA_STATUS, cloneCameraStatus } from './status';
-import type { CameraSettings, CameraStatus } from './types';
-
-export { INITIAL_CAMERA_STATUS } from './status';
+import type { CameraCapabilities, CameraSettings, CameraStatus } from './types';
 
 /**
  * CameraState: estado observable de la cámara.
@@ -17,6 +15,8 @@ export interface CameraStoreState {
   settings: CameraSettings;
   status: CameraStatus;
   controllerAttached: boolean;
+  /** Capacidades del controlador adjunto; null sin controlador. */
+  capabilities: CameraCapabilities | null;
   /** Derivado: la app puede mandar órdenes (modo ≠ external, habilitada y con controlador). */
   available: boolean;
 }
@@ -25,7 +25,7 @@ export interface CameraStoreActions {
   /** Mezcla y normaliza: lo que no se entienda vuelve al valor por defecto. */
   setSettings(partial: Partial<CameraSettings>): void;
   setStatus(status: CameraStatus): void;
-  setControllerAttached(attached: boolean): void;
+  setControllerAttached(attached: boolean, capabilities?: CameraCapabilities | null): void;
   /** Estado inicial con la configuración con la que se creó el store. */
   reset(): void;
 }
@@ -37,6 +37,7 @@ export function createCameraStore(initial?: Partial<CameraSettings>) {
     settings,
     status: cloneCameraStatus(INITIAL_CAMERA_STATUS),
     controllerAttached: false,
+    capabilities: null,
     available: false,
   });
 
@@ -51,9 +52,10 @@ export function createCameraStore(initial?: Partial<CameraSettings>) {
 
     setStatus: (status) => api.setState({ status: cloneCameraStatus(status) }),
 
-    setControllerAttached: (attached) =>
+    setControllerAttached: (attached, capabilities = null) =>
       api.setState((state) => ({
         controllerAttached: attached,
+        capabilities: attached ? capabilities && { ...capabilities } : null,
         available: isCameraControlAvailable(state.settings) && attached,
       })),
 

@@ -13,7 +13,29 @@ export type CameraMode = 'external' | 'zones' | 'auto';
 
 export const CAMERA_MODES: readonly CameraMode[] = ['external', 'zones', 'auto'];
 
-export type CameraDeviceType = 'dummy' | 'dji_rsc2' | 'sony_a6600' | 'network';
+/** Lista en tiempo de ejecución (para normalizar JSON) y tipo derivado de ella. */
+export const CAMERA_DEVICE_TYPES = ['dummy', 'dji_rsc2', 'sony_a6600', 'network'] as const;
+export type CameraDeviceType = (typeof CAMERA_DEVICE_TYPES)[number];
+
+/**
+ * Lo que el dispositivo sabe hacer. Un gimbal (DJI RSC 2) mueve pero no graba;
+ * una cámara (Sony A6600) graba y hace zoom pero no se mueve ni tiene pausa.
+ * El servicio y el panel consultan esto para no ofrecer lo que no existe.
+ */
+export interface CameraCapabilities {
+  record: boolean;
+  /** Pausar/reanudar una grabación sin cerrarla. Sin ella, descanso = STOP + REC. */
+  pause: boolean;
+  pan: boolean;
+  zoom: boolean;
+}
+
+export const FULL_CAMERA_CAPABILITIES: Readonly<CameraCapabilities> = Object.freeze({
+  record: true,
+  pause: true,
+  pan: true,
+  zoom: true,
+});
 
 export type CameraZone = 'FAR_LEFT' | 'LEFT' | 'CENTER' | 'RIGHT' | 'FAR_RIGHT';
 
@@ -55,9 +77,14 @@ export interface CameraStatus {
  * Adaptador de hardware. Todas las operaciones son asíncronas y NUNCA deben
  * bloquear la interfaz del partido: el que las llama no espera a la cámara
  * para actualizar jugadores ni tiempos.
+ *
+ * Convención: una orden fuera de `capabilities` se rechaza con
+ * `CameraError('UNSUPPORTED')` sin cambiar el estado. `zone` y `recordingId`
+ * del estado los gestiona el servicio; el adaptador puede dejarlos en null.
  */
 export interface CameraController {
   readonly deviceType: CameraDeviceType;
+  readonly capabilities: Readonly<CameraCapabilities>;
 
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -123,7 +150,7 @@ export interface CameraEventMap {
   'camera.record.resumed': { recordingId: string; timestamp: number };
   'camera.record.stopped': { recordingId: string; timestamp: number };
   'camera.zone.changed': { zone: CameraZone; previousZone: CameraZone | null; timestamp: number };
-  'camera.error': { message: string; timestamp: number };
+  'camera.error': { code: CameraErrorCode | null; message: string; timestamp: number };
 }
 
 export class CameraError extends Error {

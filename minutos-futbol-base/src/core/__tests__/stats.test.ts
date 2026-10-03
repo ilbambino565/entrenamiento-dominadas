@@ -13,7 +13,6 @@ describe('summarizeMatch', () => {
     const summary = summarizeMatch(run(events), T0 + 20 * MINUTE);
     expect(summary.players.map((p) => p.playerId)).toEqual([...F7_SQUAD, 'nico']);
     expect(summary.clockMs).toBe(20 * MINUTE);
-    expect(summary.distribution).toEqual(summary.players.map((p) => p.playedMs));
 
     const byId = new Map(summary.players.map((p) => [p.playerId, p]));
     expect(byId.get('lucas')).toMatchObject({ playedMs: 10 * MINUTE, share: 0.5, wasStarter: true, entries: 0, onFieldNow: false, addedLate: false });

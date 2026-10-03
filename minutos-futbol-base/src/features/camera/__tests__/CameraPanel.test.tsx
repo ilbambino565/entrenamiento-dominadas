@@ -1,9 +1,9 @@
+import type { AppEventMap } from '../../../events/topics';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
   createCameraService,
   createCameraStore,
   createDummyCameraController,
-  type AppBusEventMap,
   type CameraSettings,
 } from '../../../camera';
 import { createEventBus } from '../../../events/bus';
@@ -33,7 +33,7 @@ const BUTTONS = [
 
 function setup(settings: Partial<CameraSettings> | null = ZONES_SETTINGS) {
   const now = () => 1_000;
-  const bus = createEventBus<AppBusEventMap>();
+  const bus = createEventBus<AppEventMap>();
   const store = createCameraStore(settings ?? undefined);
   const dummy = createDummyCameraController({ now });
   const service = createCameraService({ bus, store, controller: dummy, now });

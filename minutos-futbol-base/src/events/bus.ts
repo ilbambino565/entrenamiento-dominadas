@@ -11,7 +11,12 @@ export type Unsubscribe = () => void;
 
 export type Handler<P> = (payload: P) => void;
 
-export interface EventBus<TMap extends Record<string, unknown>> {
+/**
+ * `TMap extends object` (y no `Record<string, unknown>`) a propósito: los mapas
+ * de temas se declaran como `interface` y una interfaz no tiene firma de índice
+ * implícita, así que `Record` los rechazaría. `keyof TMap & string` basta.
+ */
+export interface EventBus<TMap extends object> {
   emit<K extends keyof TMap & string>(topic: K, payload: TMap[K]): void;
   on<K extends keyof TMap & string>(topic: K, handler: Handler<TMap[K]>): Unsubscribe;
   once<K extends keyof TMap & string>(topic: K, handler: Handler<TMap[K]>): Unsubscribe;
@@ -25,9 +30,7 @@ export interface EventBusOptions {
   onError?: (error: unknown, topic: string) => void;
 }
 
-export function createEventBus<TMap extends Record<string, unknown>>(
-  options: EventBusOptions = {},
-): EventBus<TMap> {
+export function createEventBus<TMap extends object>(options: EventBusOptions = {}): EventBus<TMap> {
   const handlers = new Map<string, Set<Handler<unknown>>>();
   const onError =
     options.onError ??

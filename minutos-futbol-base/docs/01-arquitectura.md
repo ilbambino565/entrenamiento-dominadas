@@ -107,7 +107,7 @@ dedo suelta Hugo sobre Lucas
   → ts = Date.now()               (capturado en el instante de soltar)
   → comando substitute({in: Hugo, out: Lucas, ts})
   → validación con el dominio (invariantes)
-  → BEGIN; INSERT match_event; UPDATE proyecciones; COMMIT;   (~2-5 ms)
+  → BEGIN; INSERT match_event; COMMIT;   (~2-5 ms; proyecciones materializadas: hito M2)
   → matchStore se actualiza a partir del nuevo estado
   → háptica + animación
 ```
@@ -122,7 +122,7 @@ un estado visible que no esté guardado.
 | App | **Expo (SDK actual) + React Native + TypeScript estricto** | Una base de código para iOS y Android, OTA updates, EAS Build |
 | Navegación | **Expo Router** | Basado en archivos, deep links gratis, sencillo |
 | BD local | **expo-sqlite** (modo WAL, `synchronous=FULL`) | Transaccional y duradero; API síncrona disponible |
-| ORM / migraciones | **Drizzle ORM** | Tipado, migraciones versionadas, compatible con expo-sqlite |
+| Migraciones | **SQL plano versionado** (`PRAGMA user_version`) | Sin dependencias; se reconsiderará Drizzle en el hito M2 |
 | Estado | **Zustand** | Mínimo, sin boilerplate; selectores para evitar re-renders |
 | Gestos | **react-native-gesture-handler + Reanimated** | Arrastre a 60 fps en el hilo UI |
 | Háptica | expo-haptics | Confirmación sin mirar la pantalla |
@@ -187,23 +187,23 @@ reutilizando la misma lógica.
 
 ```
 minutos-futbol-base/
-├── app/                         # Expo Router (solo pantallas y layout)
-│   ├── _layout.tsx              # Proveedores, BD, comprobación de partido en curso
-│   ├── (tabs)/
-│   │   ├── _layout.tsx
-│   │   ├── index.tsx            # Partidos (inicio)
-│   │   ├── squad.tsx            # Plantilla
-│   │   └── settings.tsx         # Equipo / ajustes
-│   ├── player/[id].tsx          # Alta / edición de jugador
-│   ├── match/new/
-│   │   ├── _layout.tsx          # Asistente de 3 pasos
-│   │   ├── details.tsx
-│   │   ├── squad.tsx            # Convocatoria
-│   │   └── lineup.tsx           # Alineación inicial
-│   └── match/[id]/
-│       ├── live.tsx             # PANTALLA DE PARTIDO
-│       └── summary.tsx          # Resumen final
 ├── src/
+│   ├── app/                     # Expo Router (solo pantallas y layout; hitos M3-M6)
+│   │   ├── _layout.tsx          # Proveedores, BD, comprobación de partido en curso
+│   │   ├── (tabs)/
+│   │   │   ├── _layout.tsx
+│   │   │   ├── index.tsx        # Partidos (inicio)
+│   │   │   ├── squad.tsx        # Plantilla
+│   │   │   └── settings.tsx     # Equipo / ajustes
+│   │   ├── player/[id].tsx      # Alta / edición de jugador
+│   │   ├── match/new/
+│   │   │   ├── _layout.tsx      # Asistente de 3 pasos
+│   │   │   ├── details.tsx
+│   │   │   ├── squad.tsx        # Convocatoria
+│   │   │   └── lineup.tsx       # Alineación inicial
+│   │   └── match/[id]/
+│   │       ├── live.tsx         # PANTALLA DE PARTIDO
+│   │       └── summary.tsx      # Resumen final
 │   ├── core/                    # DOMINIO PURO (sin imports de RN / Expo / cámara)
 │   │   ├── formats.ts           # GameFormat F7/F8/F11
 │   │   ├── events.ts            # Timeline: MatchEvent genérico (catálogo de tipos)

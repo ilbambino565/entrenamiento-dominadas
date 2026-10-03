@@ -1,5 +1,6 @@
+import type { AppEventMap } from '../../events/topics';
 import { createEventBus } from '../../events/bus';
-import { createCameraAutomation, type AppBusEventMap } from '../automation';
+import { createCameraAutomation } from '../automation';
 import type { CameraService } from '../cameraService';
 
 /** Servicio falso: solo registra qué operación se pidió. */
@@ -10,6 +11,8 @@ function fakeService() {
     return true;
   };
   const service = {
+    // Sin controlador no hay capacidades: la automatización asume que sabe pausar.
+    getCapabilities: () => null,
     startRecording: operation('startRecording'),
     pauseRecording: operation('pauseRecording'),
     resumeRecording: operation('resumeRecording'),
@@ -22,7 +25,7 @@ const base = { matchId: 'm1', timestamp: 1_000, period: 1 };
 
 describe('createCameraAutomation (dormida en el MVP)', () => {
   it('traduce los cuatro temas del reloj a operaciones de grabación', () => {
-    const bus = createEventBus<AppBusEventMap>();
+    const bus = createEventBus<AppEventMap>();
     const { service, calls } = fakeService();
     createCameraAutomation(bus, service);
 
@@ -35,7 +38,7 @@ describe('createCameraAutomation (dormida en el MVP)', () => {
   });
 
   it('ignora el resto de temas del partido', () => {
-    const bus = createEventBus<AppBusEventMap>();
+    const bus = createEventBus<AppEventMap>();
     const { service, calls } = fakeService();
     createCameraAutomation(bus, service);
 
@@ -47,7 +50,7 @@ describe('createCameraAutomation (dormida en el MVP)', () => {
   });
 
   it('tras desuscribir no reacciona y no deja suscriptores en el bus', () => {
-    const bus = createEventBus<AppBusEventMap>();
+    const bus = createEventBus<AppEventMap>();
     const { service, calls } = fakeService();
     const stop = createCameraAutomation(bus, service);
     bus.emit('match.started', base);
@@ -65,7 +68,7 @@ describe('createCameraAutomation (dormida en el MVP)', () => {
   });
 
   it('un servicio que devuelve false no rompe la entrega a otros suscriptores', () => {
-    const bus = createEventBus<AppBusEventMap>();
+    const bus = createEventBus<AppEventMap>();
     const service = { startRecording: async () => false } as unknown as CameraService;
     createCameraAutomation(bus, service);
     const other = jest.fn();

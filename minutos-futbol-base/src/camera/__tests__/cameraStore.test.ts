@@ -1,4 +1,5 @@
-import { INITIAL_CAMERA_STATUS, createCameraStore } from '../cameraStore';
+import { createCameraStore } from '../cameraStore';
+import { INITIAL_CAMERA_STATUS } from '../status';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings, type CameraStatus } from '../types';
 
 describe('INITIAL_CAMERA_STATUS', () => {
@@ -25,6 +26,7 @@ describe('createCameraStore', () => {
       settings: DEFAULT_CAMERA_SETTINGS,
       status: INITIAL_CAMERA_STATUS,
       controllerAttached: false,
+      capabilities: null,
       available: false,
     });
     // El estado no comparte la instancia congelada: el servicio lo sobreescribe sin miedo.
@@ -103,6 +105,7 @@ describe('createCameraStore', () => {
       settings: { ...DEFAULT_CAMERA_SETTINGS, enabled: true, mode: 'zones' },
       status: INITIAL_CAMERA_STATUS,
       controllerAttached: false,
+      capabilities: null,
       available: false,
     });
   });

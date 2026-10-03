@@ -55,6 +55,17 @@ export function rowToEvent(row: MatchEventRow): MatchEvent {
   if (!(EVENT_SOURCES as readonly string[]).includes(row.source)) {
     throw corrupt(row, `source desconocido "${row.source}"`);
   }
+  // Un NaN o un null donde va un número contaminaría todo el reloj del partido.
+  const numeric: Array<[string, unknown]> = [
+    ['seq', row.seq],
+    ['timestamp', row.timestamp],
+    ['match_time_ms', row.match_time_ms],
+    ['period', row.period],
+  ];
+  if (row.voided_at != null) numeric.push(['voided_at', row.voided_at]);
+  for (const [column, value] of numeric) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw corrupt(row, `${column} no es un número finito`);
+  }
   return {
     id: row.id,
     matchId: row.match_id,

@@ -21,6 +21,7 @@ Formato inicial: fútbol 7. Arquitectura preparada para fútbol 8 y fútbol 11.
 npm install
 npm run verify            # tsc + fronteras entre módulos + tests
 npm test                  # solo tests (Jest)
+npm run test:props        # propiedades con 2 000 ejecuciones cada una (10 000 partidos)
 npm run typecheck
 npm run check:boundaries  # core / camera / events / db no se mezclan
 npx expo start            # app (de momento, pantalla de bienvenida)
