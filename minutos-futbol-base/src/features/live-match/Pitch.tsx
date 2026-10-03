@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import type { MatchState } from '../../core';
 import { useTheme } from '../../ui/theme';
 import type { PlayerInfo } from './demoTeam';
 import type { RingTone } from './derived';
-import { TOKEN_COLUMN_WIDTH, TOKEN_RADIUS, fieldTokenCenter, fitPitch, type Size } from './geometry';
+import { fieldTokenCenter, fieldTokenMetrics, fitPitch, type Size } from './geometry';
 import { DraggablePlayerToken } from './PlayerToken';
 import { normalizePosition } from './resolveDrop';
 import type { DragController, DragState } from './useDragAndDrop';
@@ -24,13 +24,16 @@ export interface PitchProps {
 
 /**
  * Campo vertical con las líneas dibujadas con Views. Ocupa el mayor rectángulo
- * de proporción fija que cabe en su hueco; las fichas se colocan por su
- * posición normalizada (0..1) con la misma regla que usa el imán del drop.
+ * que cabe en su hueco (proporción acotada, geometry.ts); las fichas se
+ * colocan por su posición normalizada (0..1) con la misma regla y las mismas
+ * medidas que usa el imán del drop, y se encogen si el campo es bajo.
  */
 export function Pitch({ state, players, views, controller, drag }: PitchProps) {
   const { colors } = useTheme();
   const [available, setAvailable] = useState<Size>({ width: 0, height: 0 });
   const size = fitPitch(available);
+  // Objeto estable por tamaño: las fichas están memoizadas y lo reciben como prop.
+  const metrics = useMemo(() => fieldTokenMetrics(size), [size.width, size.height]);
   const pitchRef = useRef<View>(null);
 
   // Medir en coordenadas de ventana: lo que `absoluteX/Y` del gesto devuelve.
@@ -92,7 +95,7 @@ export function Pitch({ state, players, views, controller, drag }: PitchProps) {
           const info = players[p.playerId];
           const view = views[p.playerId];
           if (!info || !view || !p.position) return null;
-          const center = fieldTokenCenter(p.position, size);
+          const center = fieldTokenCenter(p.position, size, metrics);
           const highlighted = drag.hover?.kind === 'token' && drag.hover.playerId === p.playerId;
           return (
             <DraggablePlayerToken
@@ -108,11 +111,12 @@ export function Pitch({ state, players, views, controller, drag }: PitchProps) {
               highlighted={highlighted}
               dimmed={isDragging && drag.draggingId !== p.playerId && !highlighted}
               dragging={drag.draggingId === p.playerId}
+              metrics={metrics}
               onPress={controller.tapToken}
               style={{
                 position: 'absolute',
-                left: center.x - TOKEN_COLUMN_WIDTH / 2,
-                top: center.y - TOKEN_RADIUS,
+                left: center.x - metrics.columnWidth / 2,
+                top: center.y - metrics.radius,
               }}
             />
           );

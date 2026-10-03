@@ -1,22 +1,35 @@
+import type { FieldPosition } from '../../../core';
 import { DARK, LIGHT } from '../../../ui/theme';
 import { DEMO_LINEUP } from '../createDemoSession';
-import { TOKEN_COLUMN_HEIGHT, TOKEN_COLUMN_WIDTH, TOKEN_RADIUS, fieldTokenCenter, fitPitch } from '../geometry';
+import { GOALKEEPER_SLOT, formationSlots, formationsFor } from '../formations';
+import {
+  FULL_TOKEN_PITCH_HEIGHT,
+  MIN_TOKEN_SCALE,
+  TOKEN_COLUMN_HEIGHT,
+  fieldTokenCenter,
+  fieldTokenMetrics,
+  fitPitch,
+  tokenMetrics,
+  type Size,
+  type TokenMetrics,
+} from '../geometry';
 
 /**
  * Revisión de usabilidad (de pie, con una mano, al sol). Son cálculos puros
- * sobre geometry.ts y theme.ts. El único `it.failing` que queda documenta un
- * límite conocido (campo muy bajo) que solo se resuelve escalando la ficha.
+ * sobre geometry.ts, formations.ts y theme.ts: ninguna ficha debe pisar el
+ * círculo de otra (texto de una encima del dorsal de otra) en los huecos que
+ * deja de verdad un móvil, con cualquier dibujo de F7.
  */
 
 /** Rectángulo de la columna de una ficha (círculo + pastilla del nombre) y de su círculo. */
-function tokenRects(center: { x: number; y: number }) {
+function tokenRects(center: { x: number; y: number }, m: TokenMetrics) {
   const column = {
-    left: center.x - TOKEN_COLUMN_WIDTH / 2,
-    right: center.x + TOKEN_COLUMN_WIDTH / 2,
-    top: center.y - TOKEN_RADIUS,
-    bottom: center.y - TOKEN_RADIUS + TOKEN_COLUMN_HEIGHT,
+    left: center.x - m.columnWidth / 2,
+    right: center.x + m.columnWidth / 2,
+    top: center.y - m.radius,
+    bottom: center.y - m.radius + m.columnHeight,
   };
-  const circle = { left: center.x - TOKEN_RADIUS, right: center.x + TOKEN_RADIUS, top: center.y - TOKEN_RADIUS, bottom: center.y + TOKEN_RADIUS };
+  const circle = { left: center.x - m.radius, right: center.x + m.radius, top: center.y - m.radius, bottom: center.y + m.radius };
   return { column, circle };
 }
 
@@ -26,54 +39,74 @@ const overlapPx = (a: Box, b: Box) => ({
   y: Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)),
 });
 
-/** Columnas que pisan el círculo de OTRA ficha (texto de una encima del dorsal de otra). */
-function columnOverlaps(pitch: { width: number; height: number }) {
-  const centers = DEMO_LINEUP.map((e) => ({ id: e.playerId, c: fieldTokenCenter(e.position, pitch) }));
+/** Columnas que pisan el círculo de OTRA ficha, con las medidas que el campo usa para ese tamaño. */
+function columnOverlaps(positions: readonly FieldPosition[], pitch: Size) {
+  const m = fieldTokenMetrics(pitch);
+  const centers = positions.map((position, i) => ({ id: i, c: fieldTokenCenter(position, pitch, m) }));
   const found: string[] = [];
   for (const a of centers) {
     for (const b of centers) {
       if (a.id === b.id) continue;
-      const o = overlapPx(tokenRects(a.c).column, tokenRects(b.c).circle);
+      const o = overlapPx(tokenRects(a.c, m).column, tokenRects(b.c, m).circle);
       if (o.x > 0 && o.y > 0) found.push(`${a.id} pisa ${b.id} (${Math.round(o.x)}×${Math.round(o.y)} px)`);
     }
   }
   return found;
 }
 
-describe('Revisión usabilidad: el campo en un móvil de 390×844', () => {
-  // Hueco que deja la pantalla: 844 − insets (47+34) − ClockBar (≈158: reloj 64 +
-  // fila de botones 56 + rival 18 + márgenes) − banquillo de una fila (≈145) −
-  // paddingVertical del área (16) = 444 de alto; 390 − 24 de ancho. Con la
-  // columna de 84 dp el banquillo es ~20 dp más bajo, así que es el caso peor.
-  const PHONE_AREA = { width: 366, height: 444 };
+const DEMO_POSITIONS = DEMO_LINEUP.map((e) => e.position);
+const preset = (formation: string): FieldPosition[] => [GOALKEEPER_SLOT, ...formationSlots(formation)];
+const F7_LINEUPS = [DEMO_POSITIONS, ...formationsFor(7).map(preset)];
+const clean = (pitch: Size) => F7_LINEUPS.every((lineup) => columnOverlaps(lineup, pitch).length === 0);
 
-  it('cabe en el hueco con la proporción fija: 302×444 (en tablet 800×1280 sale 637×937)', () => {
-    expect(fitPitch(PHONE_AREA)).toEqual({ width: 302, height: 444 });
-    expect(fitPitch({ width: 776, height: 937 })).toEqual({ width: 637, height: 937 });
-    expect(columnOverlaps(fitPitch({ width: 776, height: 937 }))).toEqual([]);
+describe('Revisión usabilidad: el campo en un móvil de 390 de ancho', () => {
+  // Huecos medidos en el navegador (Chromium, isMobile): con el reloj de 46 px y
+  // el banquillo compacto, a 390×700 (visor de la app de Claude) el campo sale
+  // de 366×416; a 390×844 lo limita el ancho: 366×538.
+  const VIEWER_PITCH = { width: 366, height: 416 };
+  const PHONE_PITCH = { width: 366, height: 538 };
+
+  it('llena el hueco si su proporción está entre 0,68 y 0,9; si no, se acota (campo real con alto de sobra, ancho con poco alto)', () => {
+    expect(fitPitch(VIEWER_PITCH)).toEqual(VIEWER_PITCH);
+    expect(fitPitch({ width: 366, height: 560 })).toEqual(PHONE_PITCH);
+    expect(fitPitch({ width: 776, height: 937 })).toEqual({ width: 776, height: 937 });
+    // Hueco muy alto → proporción real 0,68; hueco muy bajo → como mucho 0,9.
+    expect(fitPitch({ width: 300, height: 2000 })).toEqual({ width: 300, height: 441 });
+    expect(fitPitch({ width: 1000, height: 400 })).toEqual({ width: 360, height: 400 });
+    expect(fitPitch({ width: 0, height: 400 })).toEqual({ width: 0, height: 0 });
   });
 
-  it('la columna de la ficha mide 84 dp: ninguna pisa el círculo de otra con la alineación de demo en el móvil', () => {
-    // Las filas 0,22 / 0,45 / 0,68 distan 0,23 × 444 = 102 dp: con 118 dp de
-    // columna el % de Pablo caía sobre el dorsal de Mateo y el portero (acotado
-    // para que su columna quepa) chocaba con Daniel y Leo. Con 84 dp no.
+  it('la ficha de referencia (64 dp, columna de 84) vale desde 490 dp de alto de campo; por debajo se encoge, nunca por debajo de 46 dp (tocable)', () => {
     expect(TOKEN_COLUMN_HEIGHT).toBe(84);
-    expect(columnOverlaps(fitPitch(PHONE_AREA))).toEqual([]);
+    expect(fieldTokenMetrics(PHONE_PITCH)).toMatchObject({ scale: 1, size: 64, columnWidth: 84, columnHeight: 84 });
+    expect(fieldTokenMetrics({ width: 776, height: 937 }).scale).toBe(1);
+    // Visor de la app: 416/490 → círculo de 54 dp, columna de 71.
+    expect(fieldTokenMetrics(VIEWER_PITCH)).toMatchObject({ size: 54, columnHeight: 71 });
+    expect(fieldTokenMetrics({ width: 248, height: 276 })).toMatchObject({ scale: MIN_TOKEN_SCALE, size: 46 });
+    expect(tokenMetrics(MIN_TOKEN_SCALE).size).toBeGreaterThanOrEqual(44);
+    expect(tokenMetrics(5)).toEqual(tokenMetrics(1));
   });
 
-  it('las filas de la demo dejan de pisarse a partir de 425 dp de alto de campo, por debajo del hueco del móvil (444)', () => {
-    let minHeight = 0;
-    for (let h = 200; h <= 1200 && minHeight === 0; h++) {
-      if (columnOverlaps(fitPitch({ width: 10_000, height: h })).length === 0) minHeight = h;
+  it('la alineación de demo y los seis dibujos de F7 quedan limpios en el visor (416), con el menú ⋯ abierto (−64) y en el móvil con dos filas de banquillo (538 − 90)', () => {
+    for (const height of [416, 416 - 64, 538, 538 - 90, 538 - 120]) {
+      const pitch = fitPitch({ width: 366, height });
+      for (const lineup of F7_LINEUPS) expect(columnOverlaps(lineup, pitch)).toEqual([]);
     }
-    expect(minHeight).toBe(425);
-    expect(minHeight).toBeLessThanOrEqual(PHONE_AREA.height);
   });
 
-  it.failing('límite conocido: con el menú ⋯ abierto (ClockBar +64) o con 7 suplentes (2 filas, +113) el portero sigue chocando con los defensas', () => {
-    // Solo se resuelve escalando TOKEN_SIZE con el campo (afecta al imán): fuera de esta entrega.
-    expect(columnOverlaps(fitPitch({ width: 366, height: 444 - 64 }))).toEqual([]);
-    expect(columnOverlaps(fitPitch({ width: 366, height: 444 - 113 }))).toEqual([]);
+  it('con cualquier proporción (0,68 o 0,9) no hay pisadas desde ~350 dp de alto, donde la ficha toca su mínimo', () => {
+    let worst = 0;
+    for (const aspect of [0.68, 0.9]) {
+      for (let height = 250; height <= 1200; height++) {
+        if (!clean({ width: Math.round(height * aspect), height })) worst = Math.max(worst, height);
+      }
+    }
+    expect(worst).toBeLessThan(Math.round(FULL_TOKEN_PITCH_HEIGHT * MIN_TOKEN_SCALE));
+    expect(worst).toBeGreaterThan(300);
+  });
+
+  it('límite conocido: por debajo del mínimo (visor a 390×600 con dos filas de banquillo) el portero roza a los defensas', () => {
+    expect(columnOverlaps(preset('2-3-1'), fitPitch({ width: 366, height: 300 })).length).toBeGreaterThan(0);
   });
 });
 

@@ -6,7 +6,7 @@ import { formatClock, type PlayerLocation } from '../../core';
 import { TABULAR, useTheme } from '../../ui/theme';
 import type { PlayerInfo } from './demoTeam';
 import type { RingTone } from './derived';
-import { TOKEN_COLUMN_WIDTH, TOKEN_NAME_HEIGHT, TOKEN_SIZE } from './geometry';
+import { FULL_TOKEN, type TokenMetrics } from './geometry';
 import { useDraggableToken, type DragController } from './useDragAndDrop';
 
 /**
@@ -35,13 +35,20 @@ export interface PlayerTokenProps {
   dragging: boolean;
   /** Línea pequeña bajo la ficha (tiempo en el banquillo). `null` reserva el hueco; ausente no lo pinta. */
   footnote?: string | null;
+  /**
+   * Medidas (geometry.ts). El campo las escala con su alto y el banquillo usa
+   * la compacta en pantallas estrechas; por defecto, las de referencia. Deben
+   * ser objetos estables (constantes o memoizados) para no romper la memo.
+   */
+  metrics?: TokenMetrics;
   onPress: (playerId: string) => void;
   testID?: string;
 }
 
 export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
-  const { player, location, isGoalkeeper, unavailable, playedMs, tone, selected, highlighted, dimmed, dragging, footnote } = props;
+  const { player, location, isGoalkeeper, unavailable, playedMs, tone, selected, highlighted, dimmed, dragging, footnote, metrics: m = FULL_TOKEN } = props;
   const { colors } = useTheme();
+  const round = { width: m.size, height: m.size, borderRadius: m.radius };
   const ring = tone === 'low' ? colors.neutralRing : tone === 'high' ? colors.amber : colors.accent;
   const fill = isGoalkeeper ? colors.amber : colors.accent;
   const onFill = isGoalkeeper ? colors.onAmber : colors.onAccent;
@@ -60,22 +67,27 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
       accessibilityHint="Toca para seleccionar y luego toca el destino"
       accessibilityState={{ selected }}
       testID={props.testID ?? `token-${player.id}`}
-      style={[styles.column, dimmed && styles.dimmed, dragging && styles.dragging]}
+      style={[styles.column, { width: m.columnWidth }, dimmed && styles.dimmed, dragging && styles.dragging]}
     >
-      <View style={styles.circleBox}>
+      <View style={{ width: m.size, height: m.size }}>
         {/* Halo claro de 2 dp: el azul/ámbar no se separa del césped (≈1,6:1); el halo sí (≥ 4:1). */}
-        {onField ? <View testID={`token-halo-${player.id}`} style={[styles.halo, { backgroundColor: colors.grassLine }]} /> : null}
-        <View style={[styles.circle, { backgroundColor: fill, borderColor, borderWidth }]}>
+        {onField ? (
+          <View
+            testID={`token-halo-${player.id}`}
+            style={[styles.halo, { backgroundColor: colors.grassLine, width: m.size + 2 * HALO, height: m.size + 2 * HALO, borderRadius: m.radius + HALO }]}
+          />
+        ) : null}
+        <View style={[styles.circle, round, { backgroundColor: fill, borderColor, borderWidth }]}>
           {photo ? (
             <>
-              <View style={styles.photoClip}>
+              <View style={[styles.photoClip, { borderRadius: m.radius }]}>
                 <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" testID={`token-photo-${player.id}`} />
               </View>
               {/* Con foto, el dorsal pasa a una chapa pequeña y el tiempo a una banda inferior oscura. */}
               <View style={[styles.numberBadge, isGoalkeeper && { backgroundColor: colors.amber }]}>
                 <Text style={[styles.numberBadgeText, isGoalkeeper && { color: colors.onAmber }]}>{player.number}</Text>
               </View>
-              <View style={styles.timeBand}>
+              <View style={[styles.timeBand, { borderBottomLeftRadius: m.radius, borderBottomRightRadius: m.radius }]}>
                 <Text style={[styles.timeOnPhoto, TABULAR]} testID={`token-time-${player.id}`}>
                   {formatClock(playedMs)}
                 </Text>
@@ -83,8 +95,8 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
             </>
           ) : (
             <>
-              <Text style={[styles.number, { color: onFill }]}>{player.number}</Text>
-              <Text style={[styles.time, TABULAR, { color: onFill }]} testID={`token-time-${player.id}`}>
+              <Text style={[styles.number, { color: onFill, fontSize: m.numberFont, lineHeight: m.numberFont + 2 }]}>{player.number}</Text>
+              <Text style={[styles.time, TABULAR, { color: onFill, fontSize: m.timeFont, lineHeight: m.timeFont + 2 }]} testID={`token-time-${player.id}`}>
                 {formatClock(playedMs)}
               </Text>
             </>
@@ -92,8 +104,12 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
           {unavailable ? <Text style={styles.badge}>🩹</Text> : null}
         </View>
       </View>
-      <View style={[styles.namePill, { backgroundColor: colors.surface }]} testID={`token-name-${player.id}`}>
-        <Text numberOfLines={1} style={[styles.name, { color: colors.text }]}>
+      {/* Pastilla un poco más ancha que la columna: nombres de 9 letras caben sin cortarse. */}
+      <View
+        style={[styles.namePill, { backgroundColor: colors.surface, maxWidth: m.columnWidth + 16, height: m.nameHeight, borderRadius: m.nameHeight / 2 }]}
+        testID={`token-name-${player.id}`}
+      >
+        <Text numberOfLines={1} style={[styles.name, { color: colors.text, fontSize: m.nameFont, lineHeight: m.nameHeight - 2 }]}>
           {player.name}
         </Text>
       </View>
@@ -127,7 +143,7 @@ const HALO = 2;
 const OVERLAY = 'rgba(15, 23, 42, 0.74)';
 
 const styles = StyleSheet.create({
-  column: { width: TOKEN_COLUMN_WIDTH, alignItems: 'center' },
+  column: { alignItems: 'center' },
   dimmed: { opacity: 0.6 },
   dragging: {
     shadowColor: '#000',
@@ -137,25 +153,14 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   onTop: { zIndex: 20 },
-  // El halo va en una vista aparte para no tocar TOKEN_SIZE, que es el radio del imán.
-  circleBox: { width: TOKEN_SIZE, height: TOKEN_SIZE },
-  halo: {
-    position: 'absolute',
-    left: -HALO,
-    top: -HALO,
-    width: TOKEN_SIZE + 2 * HALO,
-    height: TOKEN_SIZE + 2 * HALO,
-    borderRadius: (TOKEN_SIZE + 2 * HALO) / 2,
-  },
+  // El halo va en una vista aparte para no tocar el tamaño del círculo, que es el radio del imán.
+  halo: { position: 'absolute', left: -HALO, top: -HALO },
   circle: {
-    width: TOKEN_SIZE,
-    height: TOKEN_SIZE,
-    borderRadius: TOKEN_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   // Recorte circular dentro del borde; el 🩹 queda fuera de este recorte.
-  photoClip: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, borderRadius: TOKEN_SIZE / 2, overflow: 'hidden' },
+  photoClip: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, overflow: 'hidden' },
   photo: { width: '100%', height: '100%' },
   numberBadge: {
     position: 'absolute',
@@ -175,23 +180,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingVertical: 1,
     backgroundColor: OVERLAY,
-    borderBottomLeftRadius: TOKEN_SIZE / 2,
-    borderBottomRightRadius: TOKEN_SIZE / 2,
     alignItems: 'center',
   },
   timeOnPhoto: { color: '#ffffff', fontSize: 12, lineHeight: 14, fontWeight: '700' },
-  number: { fontSize: 20, lineHeight: 22, fontWeight: '800' },
-  time: { fontSize: 14, lineHeight: 16, fontWeight: '700' },
+  number: { fontWeight: '800' },
+  time: { fontWeight: '700' },
   badge: { position: 'absolute', right: -4, top: -4, fontSize: 16 },
-  namePill: {
-    height: TOKEN_NAME_HEIGHT,
-    marginTop: 2,
-    paddingHorizontal: 6,
-    borderRadius: TOKEN_NAME_HEIGHT / 2,
-    // Un poco más ancha que la columna: nombres de 9 letras (GUILLERMO) caben sin cortarse.
-    maxWidth: TOKEN_COLUMN_WIDTH + 16,
-    justifyContent: 'center',
-  },
-  name: { fontSize: 12, lineHeight: 16, fontWeight: '700', textTransform: 'uppercase', letterSpacing: -0.2 },
+  namePill: { marginTop: 2, paddingHorizontal: 6, justifyContent: 'center' },
+  name: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: -0.2 },
   footnote: { fontSize: 11, lineHeight: 13, marginTop: 1, minHeight: 13 },
 });

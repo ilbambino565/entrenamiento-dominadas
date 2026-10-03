@@ -1,5 +1,5 @@
 import type { FieldPosition, MatchState, PlayerLocation } from '../../core';
-import { TOKEN_RADIUS, clamp, fieldTokenCenter, type Point, type Rect, type Size } from './geometry';
+import { clamp, fieldTokenCenter, fieldTokenMetrics, type Point, type Rect, type Size } from './geometry';
 
 /**
  * Qué significa soltar (o tocar) en un sitio. Función PURA (docs/04 §4.4):
@@ -125,15 +125,19 @@ export function resolveDrop(input: ResolveDropInput): DropAction {
   return resolveTarget(input.origin, locateTarget(input.point, input.layout, input.origin.playerId), input.state);
 }
 
-/** Fichas del campo con centro absoluto, derivadas del estado y del rectángulo del campo. */
+/**
+ * Fichas del campo con centro absoluto, derivadas del estado y del rectángulo
+ * del campo. Mismas medidas que pinta `Pitch` (escaladas con el alto del campo).
+ */
 export function fieldTokenLayouts(state: MatchState, pitch: Rect | null): TokenLayout[] {
   if (!pitch) return [];
   const size: Size = { width: pitch.width, height: pitch.height };
+  const m = fieldTokenMetrics(size);
   const out: TokenLayout[] = [];
   for (const p of Object.values(state.players)) {
     if (p.location !== 'FIELD' || !p.position) continue;
-    const local = fieldTokenCenter(p.position, size);
-    out.push({ playerId: p.playerId, center: { x: pitch.x + local.x, y: pitch.y + local.y }, radius: TOKEN_RADIUS });
+    const local = fieldTokenCenter(p.position, size, m);
+    out.push({ playerId: p.playerId, center: { x: pitch.x + local.x, y: pitch.y + local.y }, radius: m.radius });
   }
   return out;
 }

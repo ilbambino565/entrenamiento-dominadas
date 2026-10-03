@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import crest from '../../../assets/club/escudo-circular-128.png';
+import { NARROW_SCREEN_WIDTH } from './geometry';
 import type { MatchEngine } from '../../app-services/matchEngine';
 import { formatClock, periodClockMs, type LineupEntry, type MatchState } from '../../core';
 import { TABULAR, useTheme } from '../../ui/theme';
@@ -66,6 +67,9 @@ function periodLabel(state: MatchState, blinkOn: boolean): { text: string; dim: 
 
 export function ClockBar({ engine, state, now, players, rival, teamName, notify, onOpenSummary }: ClockBarProps) {
   const { colors, sizes } = useTheme();
+  // En móvil el reloj baja de 60 a 46 px: sigue leyéndose de pie y deja alto al campo.
+  const narrow = useWindowDimensions().width < NARROW_SCREEN_WIDTH;
+  const clockFont = narrow ? 46 : sizes.clockFont;
   const [menuOpen, setMenuOpen] = useState(false);
   const [hint, setHint] = useState(false);
 
@@ -155,7 +159,7 @@ export function ClockBar({ engine, state, now, players, rival, teamName, notify,
             </Text>
           </View>
           <View style={styles.clockRow}>
-            <Text style={[styles.clock, TABULAR, { color: colors.text, fontSize: sizes.clockFont }]} testID="clock">
+            <Text style={[styles.clock, TABULAR, { color: colors.text, fontSize: clockFont, lineHeight: clockFont + 4 }]} testID="clock">
               {clock}
             </Text>
             <View>
@@ -242,7 +246,7 @@ const styles = StyleSheet.create({
   crest: { width: 24, height: 24 },
   rival: { fontSize: 15, fontWeight: '600', flexShrink: 1 },
   clockRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  clock: { fontWeight: '800', lineHeight: 64 },
+  clock: { fontWeight: '800' },
   period: { fontSize: 20, fontWeight: '800' },
   extra: { fontSize: 14, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: 10, marginTop: 4 },

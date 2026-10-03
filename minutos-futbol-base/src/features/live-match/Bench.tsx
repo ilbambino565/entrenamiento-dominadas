@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { MatchState } from '../../core';
 import { useTheme } from '../../ui/theme';
 import type { PlayerInfo } from './demoTeam';
 import { benchElapsedMs } from './derived';
+import { COMPACT_TOKEN, FULL_TOKEN, NARROW_SCREEN_WIDTH } from './geometry';
 import type { TokenView } from './Pitch';
 import { DraggablePlayerToken } from './PlayerToken';
 import type { DragController, DragState } from './useDragAndDrop';
@@ -17,9 +18,14 @@ export interface BenchProps {
   now: number;
 }
 
-/** Banquillo: fichas en orden de convocatoria, dos filas como mucho, sin scroll. */
+/**
+ * Banquillo: fichas en orden de convocatoria, dos filas como mucho, sin scroll.
+ * En pantallas estrechas las fichas son compactas: así cinco suplentes caben en
+ * una fila y el campo conserva el alto que necesita.
+ */
 export function Bench({ state, players, views, controller, drag, now }: BenchProps) {
   const { colors } = useTheme();
+  const compact = useWindowDimensions().width < NARROW_SCREEN_WIDTH;
   const ref = useRef<View>(null);
 
   const measure = useCallback(() => {
@@ -72,6 +78,7 @@ export function Bench({ state, players, views, controller, drag, now }: BenchPro
               dimmed={isDragging && drag.draggingId !== id}
               dragging={drag.draggingId === id}
               footnote={elapsed === null ? null : `⏱ ${Math.floor(elapsed / 60_000)}'`}
+              metrics={compact ? COMPACT_TOKEN : FULL_TOKEN}
               onPress={controller.tapToken}
             />
           );
