@@ -12,6 +12,12 @@ estadísticas) existe para alimentar ese momento o para explotar sus datos.
 
 - Entrenador o delegado de pie en la banda, con **una mano** libre, al sol, a veces
   con lluvia o con frío, mirando el partido y no el móvil.
+- El dispositivo previsto es una **tablet** (más espacio para el campo y el
+  banquillo); el diseño sigue siendo "una mano, botones grandes" y debe
+  funcionar igual en un móvil.
+- La grabación en vídeo se resuelve de momento **fuera de la app** (Sony A6600
+  sobre DJI RSC 2, seguido con Force Mobile desde un móvil en el pecho del
+  delegado). La app no manda órdenes al gimbal; ver [doc 7](07-camara-y-timeline.md).
 - Cobertura mala o inexistente en muchos campos municipales.
 - El móvil se bloquea, entra una llamada, se cambia a WhatsApp, la batería baja.
 - Partidos de 2×25 (F7 alevín/benjamín) o 2×30 / 4×12,5 según la federación.
@@ -54,29 +60,45 @@ estadísticas) existe para alimentar ese momento o para explotar sus datos.
 │ UI (Expo Router, componentes RN)                             │
 │  Pantallas · Campo · Banquillo · Tarjeta jugador · Reloj     │
 │  Gestos: RNGH + Reanimated (hilo UI)                         │
+│  features/camera: CameraPanel y CameraStatusBadge (ocultos)  │
 ├──────────────────────────────────────────────────────────────┤
 │ Estado de app (Zustand)                                      │
 │  matchStore: estado derivado del partido en curso            │
+│  cameraStore: CameraState (settings + status)                │
 │  clockTick: "now" cada 1 s (solo para repintar)              │
 ├──────────────────────────────────────────────────────────────┤
-│ Aplicación (casos de uso / comandos)                         │
-│  substitute() · movePlayer() · startPeriod() · undo() ...    │
-│  Cola serie de comandos → 1 transacción SQLite por comando   │
+│ Aplicación (app-services)                                    │
+│  MatchEngine: comandos → validar → persistir → estado → bus  │
+│  createMatchSession: composición (engine + cámara + bus)     │
+│  cameraTimelineBridge: camera.* (bus) → CAMERA_* (timeline)  │
+├────────────────────────────┬─────────────────────────────────┤
+│ Dominio (core, TS puro)    │ Cámara (camera, independiente)  │
+│  events: MatchEvent        │  CameraController (interfaz)    │
+│  reducer: eventos → estado │  DummyCameraController          │
+│  time: PlayerTimeTracker   │  CameraService · cameraStore    │
+│  derive · stats · formats  │  automation (dormida)           │
+├────────────────────────────┴─────────────────────────────────┤
+│ EventBus (events): match.* · player.* · camera.*             │
 ├──────────────────────────────────────────────────────────────┤
-│ Dominio (TS puro, sin RN)                                    │
-│  reducer(events) → MatchState                                │
-│  projectIntervals(events) · playedMs(intervals, segments, now)│
-│  invariantes · GameFormat · planificador (fase 2)            │
-├──────────────────────────────────────────────────────────────┤
-│ Persistencia                                                 │
-│  expo-sqlite (WAL) + Drizzle (esquema + migraciones)         │
-│  Repositorios: TeamRepo, PlayerRepo, MatchRepo, EventStore   │
+│ Persistencia (db)                                            │
+│  expo-sqlite (WAL, synchronous=FULL) + migraciones SQL       │
+│  EventStore (puerto) → InMemoryEventStore · SqliteEventStore │
 │  Fotos: expo-file-system (directorio privado de la app)      │
 ├──────────────────────────────────────────────────────────────┤
 │ Sincronización (FASE 3)                                      │
 │  outbox → Supabase (Postgres + RLS) cuando haya red          │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+Fronteras entre módulos (las comprueba `npm run check:boundaries`): `core` solo
+importa `core` y `lib`; `camera` solo `camera`, `events` y `lib` (nunca `core`,
+`db` ni `app-services`); `db` solo `db`, `core` y `lib`. El MatchEngine no sabe
+que existe la cámara y la cámara no sabe que existe el partido: se comunican por
+el EventBus y por un puente de 30 líneas. Detalle en el [doc 7](07-camara-y-timeline.md).
+
+Nota sobre Drizzle: el diseño inicial lo proponía; de momento las migraciones
+son SQL plano versionado con `PRAGMA user_version` (menos dependencias). Se
+reconsiderará cuando lleguen las tablas de equipo y plantilla (hito M2).
 
 ### Flujo de una acción (p. ej. sustitución directa)
 
@@ -182,30 +204,45 @@ minutos-futbol-base/
 │       ├── live.tsx             # PANTALLA DE PARTIDO
 │       └── summary.tsx          # Resumen final
 ├── src/
-│   ├── core/                    # DOMINIO PURO (sin imports de RN / Expo)
+│   ├── core/                    # DOMINIO PURO (sin imports de RN / Expo / cámara)
 │   │   ├── formats.ts           # GameFormat F7/F8/F11
-│   │   ├── events.ts            # Tipos de MatchEvent
-│   │   ├── reducer.ts           # events → MatchState
-│   │   ├── projections.ts       # events → intervals, segments
-│   │   ├── time.ts              # playedMs, matchClockMs, conversiones
+│   │   ├── events.ts            # Timeline: MatchEvent genérico (catálogo de tipos)
+│   │   ├── state.ts             # MatchState, ClockSegment, PlayerInterval
+│   │   ├── reducer.ts           # eventos → MatchState (validación incluida)
+│   │   ├── time.ts              # PlayerTimeTracker: playedMs, matchClockMs, conversiones
+│   │   ├── derive.ts            # recalcula matchTimeMs / period de cada evento
 │   │   ├── invariants.ts
 │   │   ├── stats.ts             # Resumen de partido
 │   │   └── __tests__/           # Unitarios + fast-check
+│   ├── events/                  # EventBus tipado + catálogo de temas
+│   ├── camera/                  # MÓDULO DE CÁMARA (independiente del partido)
+│   │   ├── types.ts             # CameraController, CameraSettings, CameraStatus
+│   │   ├── dummyCameraController.ts
+│   │   ├── cameraStore.ts       # CameraState (zustand vanilla)
+│   │   ├── cameraService.ts     # zonas, grabación → bus
+│   │   ├── settings.ts          # valores por defecto / normalización
+│   │   └── automation.ts        # match.* → grabación (DORMIDA en el MVP)
 │   ├── db/
-│   │   ├── schema.ts            # Drizzle
-│   │   ├── migrations/
-│   │   ├── client.ts            # Apertura, PRAGMAs, integridad
-│   │   └── repos/               # teamRepo, playerRepo, matchRepo, eventStore
-│   ├── app-services/            # Casos de uso / comandos (cola serie)
-│   ├── state/                   # Zustand: matchStore, clock
+│   │   ├── schema.ts            # SQL + migraciones versionadas
+│   │   ├── client.ts            # Apertura, PRAGMAs, migrate
+│   │   ├── eventStore.ts        # Puerto EventStore
+│   │   ├── inMemoryEventStore.ts
+│   │   └── sqliteEventStore.ts  # expo-sqlite
+│   ├── app-services/
+│   │   ├── matchEngine.ts       # Fachada: comandos, cola serie, persistencia, bus, deshacer
+│   │   ├── cameraTimelineBridge.ts
+│   │   └── createMatchSession.ts
+│   ├── state/                   # Zustand: matchStore, clock (hito M5)
 │   ├── features/
+│   │   ├── camera/              # CameraPanel, CameraStatusBadge (tras feature flag)
 │   │   ├── live-match/          # Pitch, Bench, PlayerToken, DragLayer, ClockBar, UndoButton
 │   │   ├── lineup/
 │   │   ├── squad/
 │   │   └── summary/
 │   ├── ui/                      # Botones, tema claro/oscuro, tipografía
 │   ├── sync/                    # FASE 3 (vacío en el MVP)
-│   └── lib/                     # uuid, haptics, formato de tiempo
+│   └── lib/                     # uuidv7, featureFlags, haptics, formato
+├── scripts/check-boundaries.mjs # Fronteras entre módulos
 ├── e2e/                         # Flujos Maestro
 ├── docs/
 ├── .github/workflows/ci.yml     # lint, typecheck, test

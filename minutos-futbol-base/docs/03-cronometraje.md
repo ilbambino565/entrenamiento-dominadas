@@ -8,23 +8,26 @@ Es la parte crítica. Regla de oro:
 ## 3.1 Estados del partido
 
 ```
-           LINEUP_SET                 PERIOD_START(1)
+           LINEUP_SET                  MATCH_STARTED
   DRAFT ─────────────▶ READY ──────────────────────────▶ RUNNING(p=1)
                                                            │   ▲
-                                                     PAUSE │   │ RESUME
+                                              MATCH_PAUSED │   │ MATCH_RESUMED
                                                            ▼   │
                                                          PAUSED(p)
                                                            │
-                         PERIOD_END(p)  (desde RUNNING o PAUSED)
+                       HALFTIME_STARTED  (desde RUNNING o PAUSED; solo si p < nº partes)
                                                            ▼
-                     PERIOD_START(p+1)                 HALFTIME
+                        PERIOD_STARTED                 HALFTIME
             RUNNING(p+1) ◀────────────────────────────────┘
                  │
-                 │ PERIOD_END(último) + confirmar / MATCH_END
+                 │ MATCH_ENDED {NORMAL | SUSPENDED}  (desde RUNNING, PAUSED o HALFTIME)
                  ▼
-             FINISHED                 (desde cualquier estado con el partido empezado:
-                                       MATCH_END{SUSPENDED} → FINISHED + suspended)
+             FINISHED
 ```
+
+Los nombres son los de `src/core/events.ts`. `MATCH_STARTED` inicia el periodo
+1 y `PERIOD_STARTED` cada periodo siguiente; así no hay dos eventos para el
+mismo hecho.
 
 - `periods_count` es configurable (2 partes; 4 cuartos si alguna federación lo usa).
 - Botones visibles según el estado (solo el siguiente paso lógico, para reducir
@@ -145,14 +148,16 @@ Cada tarjeta se suscribe con un selector a `now` y calcula su valor
 
 ## 3.5 Deshacer
 
-- Pila LIFO de los eventos **no anulados** del partido (todos son deshacibles:
-  cambio, entrada, salida, movimiento, pausa, descanso, inicio, final).
-- `undo()` en una transacción:
-  1. `UPDATE match_event SET voided_at = now WHERE id = último no anulado`
-  2. `INSERT match_event (type='UNDO', payload={targetEventId})` (informativo; se
-     ignora al regenerar)
-  3. regenerar las proyecciones del partido desde los eventos válidos (con menos
-     de 300 eventos tarda menos de 5 ms)
+- Pila LIFO de los eventos **de usuario no anulados** del partido (todos son
+  deshacibles: cambio, entrada, salida, movimiento, pausa, descanso, inicio,
+  final). Los eventos de cámara y de sistema no se deshacen desde aquí.
+- `undo()` (implementado en `src/app-services/matchEngine.ts`):
+  1. `markVoided(último evento de usuario no anulado)`
+  2. regenerar el estado desde los eventos válidos (`reduceMatch`; con menos de
+     300 eventos tarda menos de 5 ms)
+  3. recalcular `matchTimeMs` / `period` de todos los eventos (`deriveEventFields`)
+     y persistir los que cambien
+  4. añadir `EVENT_UNDONE { targetEventId }` (informativo; se ignora al regenerar)
 - Semántica: **como si la acción nunca hubiera ocurrido.** Si Hugo entró por error
   por Lucas en el 10:00 y se deshace en el 10:20, Hugo suma 0 y Lucas suma esos
   20 s, porque nunca salió.
@@ -170,19 +175,19 @@ Cada tarjeta se suscribe con un selector a `now` y calcula su valor
 | Sustitución accidental | DESHACER (anula el evento y regenera) |
 | App cerrada o matada por el SO | Al abrir: "Hay un partido en curso · CONTINUAR"; estado = regenerar(eventos); reloj con `Date.now()` |
 | Teléfono bloqueado varios minutos | Nada que hacer: el tiempo es una diferencia de timestamps. Recálculo en `AppState → active` |
-| Cambio de 1ª a 2ª parte | `PERIOD_END` cierra el segmento; los intervalos siguen abiertos; `PERIOD_START(2)` abre un segmento nuevo |
+| Cambio de 1ª a 2ª parte | `HALFTIME_STARTED` cierra el segmento; los intervalos siguen abiertos; `PERIOD_STARTED` abre un segmento nuevo |
 | Olvido pulsar DESCANSO | Al pulsarlo tarde se ofrece en el aviso "Descanso · ajustar inicio −2 min" (corrige el `ts` del evento) |
 | Tiempo añadido | El reloj no se para solo al llegar a 25:00: muestra `+mm:ss` y una vibración suave. El árbitro manda |
-| Partido suspendido | `MATCH_END{SUSPENDED}`; las estadísticas usan el tiempo real jugado; se marca como suspendido |
+| Partido suspendido | `MATCH_ENDED{SUSPENDED}`; las estadísticas usan el tiempo real jugado; se marca como suspendido |
 | Jugador lesionado | Arrastrar al banquillo (para su tiempo). Pulsación larga → 🩹 marcador; si se intenta meter, vibración de aviso (no se bloquea) |
 | Expulsión | Igual que lesión, con 🟥; el campo se queda con 6 (está permitido: el límite es un máximo) |
 | Llega tarde | Botón `+` del banquillo → lista de no convocados → `PLAYER_ADDED` |
-| Titular planificado que finalmente no juega | "Titular" = en el campo al **pitido inicial** (derivado de `PERIOD_START(1)`), no la planificación. Si se cambia antes de INICIAR, no consta como titular ni suma minutos |
+| Titular planificado que finalmente no juega | "Titular" = en el campo al **pitido inicial** (derivado de `MATCH_STARTED`), no la planificación. Si se cambia antes de INICIAR, no consta como titular ni suma minutos |
 | Convocado que no juega nada | Aparece en el resumen con 0:00 (convocado, no jugó) |
 | Corrección posterior de un cambio | Editar el `ts` del evento (en minuto de partido) y regenerar. Se valida que no rompa invariantes |
 | Dos cambios casi simultáneos | Cada gesto captura su `ts` al soltar. **Cola serie** de comandos: se aplican en orden; `seq` desempata en el mismo milisegundo |
 | Cambios múltiples | N sustituciones seguidas (una por gesto). Fase 2: modo "cambio múltiple" que agrupa N cambios con un único `ts` |
-| Cambio de portero | `SET_GOALKEEPER` (o sustitución sobre el portero, que hereda el rol). Queda registrado para los minutos de portero (fase futura) |
+| Cambio de portero | `GOALKEEPER_SET` (o sustitución sobre el portero, que hereda el rol). Queda registrado para los minutos de portero (fase futura) |
 | Más de 7 en el campo | Se rechaza soltar en zona vacía con el campo lleno: rebote + "Suelta sobre un jugador para cambiar" |
 | Dos dedos arrastrando | Solo se permite un arrastre activo a la vez |
 | App en segundo plano a mitad de arrastre | Se cancela el arrastre (sin evento) |

@@ -85,6 +85,7 @@ CREATE TABLE match (
   home_away          TEXT,                   -- HOME | AWAY | NULL
   competition        TEXT,
   matchday           TEXT,
+  camera_settings    TEXT,                   -- JSON opcional (ver doc 7); NULL = cámara externa
   status             TEXT NOT NULL,          -- ver estados en doc 3 (proyección)
   current_period     INTEGER NOT NULL DEFAULT 0,
   started_at         INTEGER,                -- proyección
@@ -111,20 +112,29 @@ CREATE TABLE match_player (
   UNIQUE (match_id, player_id)
 );
 
--- LOG DE EVENTOS (append-only; solo se modifican voided_* y, al corregir, ts)
+-- TIMELINE / LOG DE EVENTOS (append-only; solo se modifican voided_at y los
+-- campos derivados match_time_ms / period; al corregir, timestamp)
 CREATE TABLE match_event (
-  id          TEXT PRIMARY KEY,              -- UUIDv7
-  match_id    TEXT NOT NULL REFERENCES match(id),
-  seq         INTEGER NOT NULL,              -- orden estricto dentro del partido
-  type        TEXT NOT NULL,                 -- ver catálogo
-  ts          INTEGER NOT NULL,              -- epoch ms en el que ocurrió
-  payload     TEXT NOT NULL,                 -- JSON tipado por type
-  voided_at   INTEGER,                       -- anulado por DESHACER
-  corrected_from_ts INTEGER,                 -- ts original si se corrigió
-  created_at  INTEGER NOT NULL,
+  id                  TEXT PRIMARY KEY,      -- UUIDv7
+  match_id            TEXT NOT NULL,
+  seq                 INTEGER NOT NULL,      -- orden estricto dentro del partido
+  type                TEXT NOT NULL,         -- ver catálogo
+  timestamp           INTEGER NOT NULL,      -- epoch ms REAL (clave para el vídeo)
+  match_time_ms       INTEGER NOT NULL,      -- reloj de partido en ese instante (derivado)
+  period              INTEGER NOT NULL,      -- 0 antes del pitido (derivado)
+  player_id           TEXT,                  -- jugador principal
+  secondary_player_id TEXT,                  -- en SUBSTITUTION: el que sale
+  metadata            TEXT NOT NULL,         -- JSON tipado por type
+  source              TEXT NOT NULL,         -- user | system | camera
+  voided_at           INTEGER,               -- anulado por DESHACER
+  created_at          INTEGER NOT NULL,
   UNIQUE (match_id, seq)
 );
-CREATE INDEX idx_event_match ON match_event(match_id, seq);
+CREATE INDEX idx_event_match_seq       ON match_event(match_id, seq);
+CREATE INDEX idx_event_match_player    ON match_event(match_id, player_id);       -- "momentos de Hugo"
+CREATE INDEX idx_event_match_secondary ON match_event(match_id, secondary_player_id);
+CREATE INDEX idx_event_match_type      ON match_event(match_id, type);            -- goles, cambios
+CREATE INDEX idx_event_match_time      ON match_event(match_id, timestamp);       -- sincronía con vídeo
 
 -- PROYECCIÓN: tramos con el reloj del partido en marcha
 CREATE TABLE clock_segment (
@@ -174,28 +184,37 @@ CREATE TABLE attendance (
 -- Fase 3: sync_outbox(id, table_name, row_id, op, created_at, synced_at)
 ```
 
-## 2.4 Catálogo de `MatchEvent` (MVP)
+## 2.4 Catálogo de `MatchEvent` (código: `src/core/events.ts`)
 
-| type | payload | Efecto |
-|------|---------|--------|
-| `LINEUP_SET` | `{ field: [{playerId, x, y, gk}], bench: [playerId] }` | Estado inicial antes del pitido |
-| `PERIOD_START` | `{ period }` | Abre un `ClockSegment`. En el periodo 1 marca a los titulares |
-| `PAUSE` | `{}` | Cierra el `ClockSegment` abierto |
-| `RESUME` | `{}` | Abre un `ClockSegment` en el mismo periodo |
-| `PERIOD_END` | `{ period }` | Cierra el segmento; estado `HALFTIME` (o fin si era el último periodo y se confirma) |
-| `MATCH_END` | `{ reason: 'NORMAL' \| 'SUSPENDED' }` | Cierra el segmento y **todos** los intervalos abiertos |
-| `PLAYER_IN` | `{ playerId, x, y }` | Banquillo → campo: abre un intervalo |
-| `PLAYER_OUT` | `{ playerId }` | Campo → banquillo: cierra el intervalo |
-| `SUBSTITUTION` | `{ inId, outId, x, y }` | Atómico: cierra el de `out` y abre el de `in` con el **mismo** `ts` |
-| `SWAP_ON_FIELD` | `{ aId, bId }` | Intercambia posiciones; sin efecto en el tiempo |
-| `MOVE` | `{ playerId, x, y }` | Recolocación en el campo; sin efecto en el tiempo |
-| `SET_GOALKEEPER` | `{ playerId }` | Cambio de portero (prepara minutos como portero) |
-| `PLAYER_ADDED` | `{ playerId }` | Llega tarde: se añade a la convocatoria en el banquillo |
-| `MARK_UNAVAILABLE` | `{ playerId, reason: 'INJURY' \| 'RED' \| 'OTHER' }` | Solo un marcador visual |
-| `UNDO` | `{ targetEventId }` | Informativo: el objetivo pasa a `voided_at` |
+Los jugadores implicados van siempre en `player_id` / `secondary_player_id`;
+`metadata` solo lleva lo demás.
 
-Fase 2 y siguientes: `GOAL`, `ASSIST`, `CARD`, `INJURY`, `NOTE`... no afectan al
-cálculo de minutos.
+| type | player / secondary | metadata | Efecto |
+|------|--------------------|----------|--------|
+| `LINEUP_SET` | — | `{ field: [{playerId, position, goalkeeper?}], bench }` | Alineación antes del pitido; estado `READY` |
+| `MATCH_STARTED` | — | `{}` | Abre el `ClockSegment` del periodo 1 y un intervalo por titular |
+| `MATCH_PAUSED` | — | `{}` | Cierra el `ClockSegment` abierto |
+| `MATCH_RESUMED` | — | `{}` | Abre un `ClockSegment` en el mismo periodo |
+| `HALFTIME_STARTED` | — | `{}` | Cierra el segmento; estado `HALFTIME`; los intervalos no se tocan |
+| `PERIOD_STARTED` | — | `{}` | Abre el segmento del periodo siguiente |
+| `MATCH_ENDED` | — | `{ reason: 'NORMAL' \| 'SUSPENDED' }` | Cierra el segmento y **todos** los intervalos abiertos |
+| `PLAYER_ENTERED` | entra / — | `{ position }` | Banquillo → campo: abre un intervalo |
+| `PLAYER_LEFT` | sale / — | `{}` | Campo → banquillo: cierra el intervalo |
+| `SUBSTITUTION` | entra / sale | `{ position }` | Atómico: cierra el de `sale` y abre el de `entra` con el **mismo** `timestamp` |
+| `PLAYER_MOVED` | jugador / — | `{ position }` | Recolocación; sin efecto en el tiempo |
+| `PLAYERS_SWAPPED` | a / b | `{}` | Intercambian posición; sin efecto en el tiempo |
+| `GOALKEEPER_SET` | jugador / — | `{}` | Cambio de portero (prepara minutos como portero) |
+| `PLAYER_ADDED` | jugador / — | `{}` | Llega tarde: se añade al banquillo |
+| `PLAYER_UNAVAILABLE` | jugador / — | `{ unavailable, reason }` | Marcador visual (lesión, expulsión) |
+| `GOAL` `ASSIST` `YELLOW_CARD` `RED_CARD` | jugador / — | `{}` | Fase 2. No afectan a los minutos |
+| `CAMERA_RECORDING_STARTED` | — | `{ recordingId, deviceType }` | Origen del offset de vídeo |
+| `CAMERA_RECORDING_PAUSED` `_RESUMED` `_STOPPED` | — | `{ recordingId }` | Cámara. No afectan a los minutos |
+| `CAMERA_ZONE_CHANGED` | — | `{ zone, previousZone }` | Cámara (modo zonas futuro) |
+| `EVENT_UNDONE` | — | `{ targetEventId }` | Informativo: el objetivo pasa a `voided_at` |
+
+Entidad futura (vídeo): `recording(id, match_id, started_at, ended_at,
+file_uri, manual_offset_ms)`; `CAMERA_RECORDING_STARTED` ya guarda lo necesario
+para crearla.
 
 ## 2.5 Invariantes (comprobadas en el dominio y en los tests)
 
@@ -206,8 +225,9 @@ cálculo de minutos.
 4. Como mucho un `ClockSegment` abierto por partido, y solo en los estados
    `RUNNING`.
 5. Con el partido `FINISHED` no hay nada abierto.
-6. Los `seq` son consecutivos y los `ts` no decrecen (salvo correcciones
-   explícitas, que se reordenan al regenerar).
+6. Los `seq` son consecutivos y únicos. Los `timestamp` normalmente no
+   decrecen, pero no se exige: el reloj del sistema puede saltar y los cálculos
+   nunca producen duraciones negativas. El orden de aplicación es siempre `seq`.
 7. `location = FIELD` ⇔ el jugador tiene un intervalo abierto (antes del pitido,
    ⇔ está en la alineación).
 8. `regenerar(eventos) == proyecciones guardadas`. Se comprueba al abrir un partido;

@@ -9,9 +9,22 @@ Prioridad: **VELOCIDAD > SIMPLICIDAD > FIABILIDAD > ESTADÍSTICAS**.
 
 Formato inicial: fútbol 7. Arquitectura preparada para fútbol 8 y fútbol 11.
 
-> Estado: **fase de diseño**. Aún no hay código. El primer objetivo es que el flujo
-> `INICIAR PARTIDO → MOVER JUGADORES → CONTROLAR MINUTOS → FINALIZAR PARTIDO`
-> sea completamente sólido antes de añadir nada más.
+> Estado: **núcleo en construcción** (hitos M0-M2 del roadmap). Existe el dominio
+> puro, la persistencia de la timeline, el motor del partido y el módulo de
+> cámara desacoplado; todavía no hay pantallas de partido. El primer objetivo
+> sigue siendo que el flujo `INICIAR PARTIDO → MOVER JUGADORES → CONTROLAR
+> MINUTOS → FINALIZAR PARTIDO` sea completamente sólido antes de añadir nada más.
+
+## Comandos
+
+```bash
+npm install
+npm run verify            # tsc + fronteras entre módulos + tests
+npm test                  # solo tests (Jest)
+npm run typecheck
+npm run check:boundaries  # core / camera / events / db no se mezclan
+npx expo start            # app (de momento, pantalla de bienvenida)
+```
 
 ## Documentación
 
@@ -24,8 +37,9 @@ Formato inicial: fútbol 7. Arquitectura preparada para fútbol 8 y fútbol 11.
 | 4 | [Drag & drop](docs/04-drag-and-drop.md) | Interacción, problemas previstos y soluciones |
 | 5 | [Navegación y pantallas](docs/05-navegacion-pantallas.md) | Mapa de navegación y wireframes textuales |
 | 6 | [Roadmap MVP](docs/06-roadmap.md) | Hitos, criterios de salida, fuera de alcance |
+| 7 | [Cámara y timeline](docs/07-camara-y-timeline.md) | Timeline genérica, módulo de cámara desacoplado, sincronización futura con vídeo |
 
 ## Stack propuesto
 
-React Native + Expo + TypeScript · Expo Router · expo-sqlite (WAL) + Drizzle ·
-Zustand · react-native-gesture-handler + Reanimated · Supabase (fase 3).
+React Native + Expo + TypeScript · Expo Router · expo-sqlite (WAL, migraciones
+SQL) · Zustand · react-native-gesture-handler + Reanimated · Supabase (fase 3).
