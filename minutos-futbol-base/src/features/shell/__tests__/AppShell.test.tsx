@@ -11,6 +11,7 @@ import { createInMemoryMatchRepository } from '../../../db/inMemoryMatchReposito
 import { createInMemorySquadRepository } from '../../../db/inMemorySquadRepository';
 import { fieldTokenCenter, fieldTokenMetrics, fitPitch } from '../../live-match/geometry';
 import { AppShell } from '../AppShell';
+import type { Fixture } from '../../../core/fixture';
 import { startMatch } from '../startMatch';
 import { firstTeamDraft } from '../FirstRunScreen';
 import type { Persistence } from '../persistence';
@@ -158,6 +159,30 @@ async function seedMatch(service: SquadService, opponent: string, play: 'draft' 
   await active_.tracker.stop();
   await active_.session.dispose();
   return active_.matchId;
+}
+
+/** Partidos del calendario de un equipo con clubes inventados; `days` cuenta desde la fecha del reloj simulado. */
+async function seedFixtures(service: SquadService, list: ReadonlyArray<{ matchday: number; days: number; opponent: string; hasTime?: boolean; homeAway?: 'HOME' | 'AWAY'; matchId?: string | null }>): Promise<Fixture[]> {
+  const teamId = service.getState().team!.id;
+  const base = new Date(T0);
+  const fixtures: Fixture[] = list.map((f) => ({
+    id: `fixture-${f.matchday}`,
+    teamId,
+    matchday: f.matchday,
+    matchdayDate: new Date(base.getFullYear(), base.getMonth(), base.getDate() + f.days).getTime(),
+    opponent: f.opponent,
+    homeAway: f.homeAway ?? 'HOME',
+    venue: null,
+    scheduledAt: f.hasTime ? new Date(base.getFullYear(), base.getMonth(), base.getDate() + f.days, 10, 30).getTime() : new Date(base.getFullYear(), base.getMonth(), base.getDate() + f.days).getTime(),
+    hasTime: f.hasTime ?? false,
+    competition: 'Liga Inventada Benjamín',
+    season: '2030-2031',
+    matchId: f.matchId ?? null,
+    createdAt: T0,
+    updatedAt: T0,
+  }));
+  await persistenceOf(service).fixtures.replaceFixtures(teamId, fixtures);
+  return fixtures;
 }
 
 const setPack = (pack: unknown) => {
@@ -461,6 +486,102 @@ describe('AppShell — crear partido (P5-P7) y persistencia', () => {
     ]);
     await fireEvent.press(screen.getByTestId('calendar-finish'));
     expect(await screen.findByTestId('play-match')).toBeTruthy();
+  });
+
+  it('Próximos partidos: lista los de hoy en adelante; tocar uno rellena P5, la hora se pone a mano, volver atrás la recuerda y al jugarlo queda marcado y sale de la lista', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo'], 'Ana');
+    const persistence = persistenceOf(service);
+    await seedFixtures(service, [
+      { matchday: 3, days: -7, opponent: 'CLUB PASADO' },
+      { matchday: 5, days: 5, opponent: 'UD NORTE', homeAway: 'AWAY' },
+      { matchday: 6, days: 12, opponent: 'ATLETICO SUR', hasTime: true },
+      { matchday: 4, days: 3, opponent: 'CLUB JUGADO', matchId: 'match-x' },
+    ]);
+    const screen = await renderShell(service);
+
+    expect(await screen.findByTestId('upcoming-title')).toHaveTextContent('Próximos partidos');
+    expect(screen.queryByTestId('fixture-row-fixture-3')).toBeNull();
+    expect(screen.queryByTestId('fixture-row-fixture-4')).toBeNull();
+    expect(screen.getByTestId('fixture-opponent-fixture-5')).toHaveTextContent('vs UD NORTE');
+    expect(screen.getByTestId('fixture-side-fixture-5')).toHaveTextContent('J5 · fuera');
+    expect(screen.getByTestId('fixture-side-fixture-6')).toHaveTextContent('J6 · en casa');
+    expect(screen.getByTestId('fixture-when-fixture-6')).toHaveTextContent(/10:30/);
+    expect(screen.getByTestId('fixture-when-fixture-5').props.children).not.toMatch(/:/);
+    expect(flat(screen.getByTestId('fixture-row-fixture-5').props.style).minHeight).toBeGreaterThanOrEqual(56);
+
+    await fireEvent.press(screen.getByTestId('fixture-row-fixture-5'));
+    expect(screen.getByTestId('setup-opponent').props.value).toBe('UD NORTE');
+    expect(screen.getByTestId('setup-time').props.value).toBe('');
+    expect(selected(screen.getByTestId('setup-away'))).toBe(true);
+    expect(screen.getByTestId('setup-matchday').props.value).toBe('Jornada 5');
+    expect(screen.getByTestId('setup-competition').props.value).toBe('Liga Inventada Benjamín');
+
+    await fireEvent.press(screen.getByTestId('setup-continue'));
+    expect(screen.getByTestId('setup-date-error')).toBeTruthy();
+    await fireEvent.changeText(screen.getByTestId('setup-time'), '11:15');
+    await fireEvent.press(screen.getByTestId('setup-continue'));
+    await fireEvent.press(await screen.findByTestId('convocation-back'));
+    expect((await screen.findByTestId('setup-time')).props.value).toBe('11:15');
+    expect(screen.getByTestId('setup-opponent').props.value).toBe('UD NORTE');
+
+    await fireEvent.press(screen.getByTestId('setup-continue'));
+    await fireEvent.press(await screen.findByTestId('convocation-continue'));
+    await fireEvent.press(await screen.findByTestId('lineup-start'));
+    await screen.findByTestId('main-button');
+
+    const matches = await persistence.matches.listRecentMatches();
+    expect(matches).toHaveLength(1);
+    const base = new Date(T0);
+    expect(matches[0]).toMatchObject({ opponent: 'UD NORTE', homeAway: 'AWAY', competition: 'Liga Inventada Benjamín', matchday: 'Jornada 5', scheduledAt: new Date(base.getFullYear(), base.getMonth(), base.getDate() + 5, 11, 15).getTime() });
+    const linked = (await persistence.fixtures.listFixtures(service.getState().team!.id)).find((f) => f.id === 'fixture-5');
+    expect(linked?.matchId).toBe(matches[0]!.id);
+
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    await fireEvent(screen.getByTestId('exit-button'), 'longPress');
+    expect(await screen.findByTestId('fixture-row-fixture-6')).toBeTruthy();
+    expect(screen.queryByTestId('fixture-row-fixture-5')).toBeNull();
+  });
+
+  it('Próximos partidos: cancelar el asistente no marca nada, y JUGAR PARTIDO a mano no usa el calendario', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const persistence = persistenceOf(service);
+    await seedFixtures(service, [{ matchday: 5, days: 5, opponent: 'UD NORTE' }]);
+    const screen = await renderShell(service);
+
+    await fireEvent.press(await screen.findByTestId('fixture-row-fixture-5'));
+    await fireEvent.press(screen.getByTestId('setup-back'));
+    expect(await screen.findByTestId('fixture-row-fixture-5')).toBeTruthy();
+    expect((await persistence.fixtures.listFixtures(service.getState().team!.id))[0]?.matchId).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('play-match'));
+    expect(screen.getByTestId('setup-opponent').props.value).toBe('');
+    expect(screen.getByTestId('setup-time').props.value).not.toBe('');
+  });
+
+  it('Próximos partidos: sin calendario no aparece el apartado, y si no se puede marcar como jugado el partido se abre igual', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const persistence = persistenceOf(service);
+    const screen = await renderShell(service);
+    expect(await screen.findByTestId('play-match')).toBeTruthy();
+    expect(screen.queryByTestId('upcoming-title')).toBeNull();
+    await screen.unmount();
+
+    await seedFixtures(service, [{ matchday: 5, days: 5, opponent: 'UD NORTE' }]);
+    jest.spyOn(persistence.fixtures, 'linkMatch').mockRejectedValueOnce(new Error('disco lleno'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const second = await renderShell(service);
+    await fireEvent.press(await second.findByTestId('fixture-row-fixture-5'));
+    await fireEvent.changeText(second.getByTestId('setup-time'), '10:00');
+    await fireEvent.press(second.getByTestId('setup-continue'));
+    await fireEvent.press(await second.findByTestId('convocation-continue'));
+    await fireEvent.press(await second.findByTestId('lineup-start'));
+    expect(await second.findByTestId('main-button')).toBeTruthy();
+    expect(await persistence.matches.listRecentMatches()).toHaveLength(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('← desde cada paso vuelve al anterior y desde P5 a Partidos, sin crear nada', async () => {

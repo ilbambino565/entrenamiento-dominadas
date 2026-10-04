@@ -3,8 +3,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import crest from '../../../assets/club/escudo-circular-128.png';
 import type { SquadService } from '../../app-services/squadService';
 import { isValidFormation } from '../../core/formations';
+import type { Fixture } from '../../core/fixture';
 import type { Match } from '../../core/match';
-import { formatShortDate } from '../../core/matchSetup';
+import { formatShortDate, formatTimeText } from '../../core/matchSetup';
 import { activePlayers, defaultFormationFor, teamMatchConfig } from '../../core/squad';
 import type { Team } from '../../core/team';
 import { useSquadState } from '../../state';
@@ -19,6 +20,10 @@ import { SIZES, useTheme } from '../../ui/theme';
 export interface MatchesHomeProps {
   service: SquadService;
   onPlay: () => void;
+  /** Próximos partidos del calendario importado, del más cercano al más lejano. */
+  upcoming?: readonly Fixture[];
+  /** Tocar uno abre P5 con sus datos rellenos. */
+  onPickFixture?: (fixture: Fixture) => void;
   /** Partidos recientes, de más nuevo a más viejo. */
   recent?: readonly Match[];
   onOpenMatch?: (match: Match) => void;
@@ -55,7 +60,7 @@ export function plannedFormation(team: Team): { playersOnField: number; formatio
   return { playersOnField, formation };
 }
 
-export function MatchesHome({ service, onPlay, recent = [], onOpenMatch, onImportCalendar }: MatchesHomeProps) {
+export function MatchesHome({ service, onPlay, recent = [], onOpenMatch, onImportCalendar, upcoming = [], onPickFixture }: MatchesHomeProps) {
   const { colors } = useTheme();
   const { team, players } = useSquadState(service);
 
@@ -123,6 +128,16 @@ export function MatchesHome({ service, onPlay, recent = [], onOpenMatch, onImpor
             <Text style={[styles.secondaryText, { color: colors.accent }]}>IMPORTAR CALENDARIO</Text>
           </Pressable>
         ) : null}
+        {upcoming.length > 0 ? (
+          <>
+            <Text style={[styles.sectionLabel, { color: colors.textMuted }]} accessibilityRole="header" testID="upcoming-title">
+              Próximos partidos
+            </Text>
+            {upcoming.map((fixture) => (
+              <FixtureRow key={fixture.id} fixture={fixture} onPick={onPickFixture} />
+            ))}
+          </>
+        ) : null}
         {recent.length > 0 ? (
           <>
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]} accessibilityRole="header">
@@ -138,6 +153,32 @@ export function MatchesHome({ service, onPlay, recent = [], onOpenMatch, onImpor
         ) : null}
       </View>
     </SafeAreaView>
+  );
+}
+
+function FixtureRow({ fixture, onPick }: { fixture: Fixture; onPick?: (fixture: Fixture) => void }) {
+  const { colors } = useTheme();
+  const when = fixture.hasTime ? `${formatShortDate(fixture.scheduledAt)} ${formatTimeText(fixture.scheduledAt)}` : formatShortDate(fixture.scheduledAt);
+  const side = fixture.homeAway === 'HOME' ? 'en casa' : 'fuera';
+  return (
+    <Pressable
+      onPress={() => onPick?.(fixture)}
+      disabled={onPick === undefined}
+      accessibilityRole="button"
+      accessibilityLabel={`Jornada ${fixture.matchday}, ${when} contra ${fixture.opponent}, ${side}. Crear partido`}
+      testID={`fixture-row-${fixture.id}`}
+      style={[styles.row, { borderBottomColor: colors.surfaceRaised }]}
+    >
+      <Text style={[styles.rowDate, styles.fixtureDate, { color: colors.textMuted }]} testID={`fixture-when-${fixture.id}`}>
+        {when}
+      </Text>
+      <Text numberOfLines={1} style={[styles.rowName, { color: colors.text }]} testID={`fixture-opponent-${fixture.id}`}>
+        vs {fixture.opponent}
+      </Text>
+      <Text style={[styles.rowStatus, { color: colors.textMuted }]} testID={`fixture-side-${fixture.id}`}>
+        J{fixture.matchday} · {side}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -197,6 +238,7 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 12 },
   row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   rowDate: { width: 72, fontSize: 15, fontWeight: '700' },
+  fixtureDate: { width: 96 },
   rowName: { flex: 1, fontSize: 17, fontWeight: '600' },
   rowStatus: { fontSize: 14, fontWeight: '700' },
   note: { fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 4 },

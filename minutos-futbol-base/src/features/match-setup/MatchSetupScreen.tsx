@@ -16,6 +16,7 @@ import {
   validateMatchSetup,
   type MatchSetupDraft,
   type MatchSetupField,
+  type MatchSetupPrefill,
 } from '../../core/matchSetup';
 import type { Team } from '../../core/team';
 import { useTheme } from '../../ui/theme';
@@ -35,20 +36,26 @@ export interface MatchSetupScreenProps {
   onCancel: () => void;
   /** Reloj inyectable: fecha inicial propuesta. */
   now?: number;
+  /** Partido del calendario que adelanta rival, fecha, local/visitante, competición y jornada. */
+  prefill?: MatchSetupPrefill;
+  /** Lo ya escrito al volver atrás desde la convocatoria: manda sobre `prefill` y los valores del equipo. */
+  initialDraft?: MatchSetupDraft;
 }
 
-export function MatchSetupScreen({ team, onContinue, onCancel, now }: MatchSetupScreenProps) {
+export function MatchSetupScreen({ team, onContinue, onCancel, now, prefill, initialDraft }: MatchSetupScreenProps) {
   const { colors } = useTheme();
   const initial = useMemo(() => defaultMatchSetup(team, now ?? Date.now()), [team, now]);
-  const [opponent, setOpponent] = useState(initial.opponent);
-  const [dateText, setDateText] = useState(formatDateText(initial.scheduledAt ?? 0));
-  const [timeText, setTimeText] = useState(formatTimeText(initial.scheduledAt ?? 0));
-  const [periodsCount, setPeriodsCount] = useState(initial.periodsCount);
-  const [minutesText, setMinutesText] = useState(String(initial.periodMinutes ?? ''));
-  const [homeAway, setHomeAway] = useState<HomeAway | null>(null);
-  const [competition, setCompetition] = useState('');
-  const [matchday, setMatchday] = useState('');
-  const [moreOpen, setMoreOpen] = useState(false);
+  const scheduledAt = initialDraft?.scheduledAt ?? prefill?.scheduledAt ?? initial.scheduledAt ?? 0;
+  const [opponent, setOpponent] = useState(initialDraft?.opponent ?? prefill?.opponent ?? initial.opponent);
+  const [dateText, setDateText] = useState(formatDateText(scheduledAt));
+  const [timeText, setTimeText] = useState(!initialDraft && prefill && !prefill.hasTime ? '' : formatTimeText(scheduledAt));
+  const [periodsCount, setPeriodsCount] = useState(initialDraft?.periodsCount ?? initial.periodsCount);
+  const [minutesText, setMinutesText] = useState(String(initialDraft?.periodMinutes ?? initial.periodMinutes ?? ''));
+  const [homeAway, setHomeAway] = useState<HomeAway | null>(initialDraft ? initialDraft.homeAway : (prefill?.homeAway ?? null));
+  const [competition, setCompetition] = useState(initialDraft?.competition ?? prefill?.competition ?? '');
+  const [matchday, setMatchday] = useState(initialDraft?.matchday ?? prefill?.matchday ?? '');
+  // Con un partido del calendario (o datos ya escritos) los opcionales vienen rellenos: se dejan a la vista para repasarlos.
+  const [moreOpen, setMoreOpen] = useState(prefill !== undefined || (initialDraft !== undefined && (initialDraft.homeAway !== null || initialDraft.competition !== '' || initialDraft.matchday !== '')));
   const [submitted, setSubmitted] = useState(false);
 
   const draft: MatchSetupDraft = {

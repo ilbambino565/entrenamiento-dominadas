@@ -1,4 +1,5 @@
 import type { HomeAway } from './match';
+import type { MatchSetupPrefill } from './matchSetup';
 import type { RfafCalendar } from './rfafCalendar';
 
 /**
@@ -77,4 +78,16 @@ export function upcomingFixtures(fixtures: readonly Fixture[], now: number, limi
     .filter((f) => f.matchId === null && f.scheduledAt >= today)
     .sort((a, b) => a.scheduledAt - b.scheduledAt || a.matchday - b.matchday)
     .slice(0, limit);
+}
+
+/** Un partido del calendario → lo que rellena P5 (rival, fecha, hora si la hay, local/visitante, competición y jornada). */
+export function setupPrefillFromFixture(fixture: Fixture): MatchSetupPrefill {
+  return {
+    opponent: fixture.opponent,
+    scheduledAt: fixture.scheduledAt,
+    hasTime: fixture.hasTime,
+    homeAway: fixture.homeAway,
+    competition: fixture.competition ?? '',
+    matchday: `Jornada ${fixture.matchday}`,
+  };
 }

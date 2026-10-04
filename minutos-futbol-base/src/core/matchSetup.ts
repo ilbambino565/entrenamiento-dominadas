@@ -26,6 +26,20 @@ export interface MatchSetupDraft {
   matchday: string;
 }
 
+/**
+ * Lo que un partido del calendario adelanta a P5. Sin hora en la fuente
+ * (`hasTime` false) la fecha va rellena y la hora queda vacía para que el
+ * entrenador la ponga: no se inventa una hora que luego se guardaría.
+ */
+export interface MatchSetupPrefill {
+  opponent: string;
+  scheduledAt: number;
+  hasTime: boolean;
+  homeAway: HomeAway | null;
+  competition: string;
+  matchday: string;
+}
+
 export type MatchSetupField = 'opponent' | 'scheduledAt' | 'periodsCount' | 'periodMinutes' | 'competition' | 'matchday';
 
 export interface MatchSetupIssue {

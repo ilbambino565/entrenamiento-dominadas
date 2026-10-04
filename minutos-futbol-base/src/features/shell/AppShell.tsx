@@ -7,6 +7,7 @@ import { teamMatchConfig } from '../../core/squad';
 import { readTeamPack } from '../../core/teamPack';
 import { useSquadState } from '../../state';
 import { useTheme } from '../../ui/theme';
+import { setupPrefillFromFixture, upcomingFixtures, type Fixture } from '../../core/fixture';
 import type { Match } from '../../core/match';
 import { LiveMatchScreen, SummarySheet } from '../live-match';
 import { CalendarImportScreen, ConvocationScreen, LineupScreen, MatchSetupScreen } from '../match-setup';
@@ -48,14 +49,14 @@ export interface AppShellProps {
 }
 
 type NewMatchStep =
-  | { step: 'data' }
+  | { step: 'data'; /** Lo ya escrito al volver atrás desde la convocatoria. */ draft?: MatchSetupDraft }
   | { step: 'squad'; draft: MatchSetupDraft }
   | { step: 'lineup'; draft: MatchSetupDraft; convocated: string[] };
 
 type Route =
   | { kind: 'tabs' }
   | { kind: 'player'; playerId: string | null }
-  | ({ kind: 'new' } & NewMatchStep)
+  | ({ kind: 'new'; /** Partido del calendario desde el que se crea, o null si se crea a mano. */ fixture: Fixture | null } & NewMatchStep)
   | { kind: 'calendar' }
   | { kind: 'match'; match: ActiveMatch }
   | { kind: 'summary'; viewed: ViewedMatch };
@@ -100,6 +101,7 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   // P0: `undefined` = aún sin comprobar; `null` = nada que recuperar.
   const [resumable, setResumable] = useState<ResumableMatch | null | undefined>(undefined);
   const [recent, setRecent] = useState<Match[]>([]);
+  const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
@@ -127,7 +129,7 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
       }
       if (route.kind === 'new') {
         setStartError(null);
-        setRoute(route.step === 'lineup' ? { kind: 'new', step: 'squad', draft: route.draft } : route.step === 'squad' ? { kind: 'new', step: 'data' } : TABS_ROUTE);
+        setRoute(route.step === 'lineup' ? { kind: 'new', fixture: route.fixture, step: 'squad', draft: route.draft } : route.step === 'squad' ? { kind: 'new', fixture: route.fixture, step: 'data', draft: route.draft } : TABS_ROUTE);
         return true;
       }
       if (tab !== 'matches') {
@@ -176,10 +178,17 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
       .listRecentMatches(RECENT_MATCHES)
       .then((list) => alive && setRecent(list))
       .catch((error: unknown) => console.warn('[AppShell] no se pudo leer la lista de partidos', error));
+    const teamId = service.getState().team?.id;
+    if (teamId) {
+      persistence.fixtures
+        .listFixtures(teamId)
+        .then((list) => alive && setFixtures(list))
+        .catch((error: unknown) => console.warn('[AppShell] no se pudo leer el calendario', error));
+    }
     return () => {
       alive = false;
     };
-  }, [booted, hasTeam, onTabs, persistence, resumable]);
+  }, [booted, hasTeam, onTabs, persistence, service, resumable]);
 
   const openMatch = useCallback(
     async (match: Match) => {
@@ -224,17 +233,26 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
 
   const play = useCallback(() => {
     setStartError(null);
-    setRoute({ kind: 'new', step: 'data' });
+    setRoute({ kind: 'new', fixture: null, step: 'data' });
+  }, []);
+
+  const playFixture = useCallback((fixture: Fixture) => {
+    setStartError(null);
+    setRoute({ kind: 'new', fixture, step: 'data' });
   }, []);
 
   const begin = useCallback(
-    async (draft: MatchSetupDraft, convocated: string[], lineup: LineupEntry[], bench: string[]) => {
+    async (draft: MatchSetupDraft, convocated: string[], lineup: LineupEntry[], bench: string[], fixture: Fixture | null) => {
       const team = service.getState().team;
       if (!team || starting) return;
       setStarting(true);
       setStartError(null);
       try {
         const match = await startMatch({ persistence, team, draft, players: service.getState().players, convocated, lineup, bench, now });
+        if (fixture) {
+          // El partido ya existe: si el calendario no se puede actualizar solo se registra (saldrá otra vez en Próximos partidos).
+          await persistence.fixtures.linkMatch(fixture.id, match.matchId, now()).catch((error: unknown) => console.warn('[AppShell] no se pudo marcar el partido del calendario como jugado', error));
+        }
         setRoute({ kind: 'match', match });
       } catch (error) {
         console.warn('[AppShell] no se pudo crear el partido', error);
@@ -271,7 +289,16 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   if (route.kind === 'new') {
     const { team, players } = state;
     if (route.step === 'data') {
-      return <MatchSetupScreen team={team} now={now()} onCancel={() => setRoute(TABS_ROUTE)} onContinue={(draft) => setRoute({ kind: 'new', step: 'squad', draft })} />;
+      return (
+        <MatchSetupScreen
+          team={team}
+          now={now()}
+          prefill={route.fixture ? setupPrefillFromFixture(route.fixture) : undefined}
+          initialDraft={route.draft}
+          onCancel={() => setRoute(TABS_ROUTE)}
+          onContinue={(draft) => setRoute({ kind: 'new', fixture: route.fixture, step: 'squad', draft })}
+        />
+      );
     }
     const { playersOnField } = teamMatchConfig(team);
     if (route.step === 'squad') {
@@ -280,8 +307,8 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
           players={players}
           displayNameMode={team.displayNameMode}
           playersOnField={playersOnField}
-          onBack={() => setRoute({ kind: 'new', step: 'data' })}
-          onContinue={(convocated) => setRoute({ kind: 'new', step: 'lineup', draft: route.draft, convocated })}
+          onBack={() => setRoute({ kind: 'new', fixture: route.fixture, step: 'data', draft: route.draft })}
+          onContinue={(convocated) => setRoute({ kind: 'new', fixture: route.fixture, step: 'lineup', draft: route.draft, convocated })}
         />
       );
     }
@@ -295,9 +322,9 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
         busy={starting}
         onBack={() => {
           setStartError(null);
-          setRoute({ kind: 'new', step: 'squad', draft: route.draft });
+          setRoute({ kind: 'new', fixture: route.fixture, step: 'squad', draft: route.draft });
         }}
-        onStart={(lineup, bench) => void begin(route.draft, route.convocated, lineup, bench)}
+        onStart={(lineup, bench) => void begin(route.draft, route.convocated, lineup, bench, route.fixture)}
       />
     );
   }
@@ -351,7 +378,7 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
-        {tab === 'matches' ? <MatchesHome service={service} onPlay={play} recent={recent} onOpenMatch={(m) => void openMatch(m)} onImportCalendar={() => setRoute({ kind: 'calendar' })} /> : null}
+        {tab === 'matches' ? <MatchesHome service={service} onPlay={play} recent={recent} onOpenMatch={(m) => void openMatch(m)} onImportCalendar={() => setRoute({ kind: 'calendar' })} upcoming={upcomingFixtures(fixtures, now())} onPickFixture={playFixture} /> : null}
         {tab === 'squad' ? <SquadScreen service={service} onAddPlayer={addPlayer} onEditPlayer={editPlayer} scrollToEndKey={scrollToEndKey} /> : null}
         {tab === 'team' ? <TeamScreen service={service} /> : null}
       </View>

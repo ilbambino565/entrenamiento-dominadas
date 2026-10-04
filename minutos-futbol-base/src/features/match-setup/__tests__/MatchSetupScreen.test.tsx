@@ -115,4 +115,51 @@ describe('MatchSetupScreen (P5)', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onContinue).not.toHaveBeenCalled();
   });
+
+  it('con un partido del calendario sin hora rellena rival, fecha, local/visitante, competición y jornada, deja la hora vacía y abre los opcionales', async () => {
+    const onContinue = jest.fn();
+    const prefill = { opponent: 'UD NORTE', scheduledAt: new Date(2026, 9, 11).getTime(), hasTime: false, homeAway: 'AWAY' as const, competition: 'Liga Inventada', matchday: 'Jornada 4' };
+    const screen = await render(<MatchSetupScreen team={team} now={NOW} prefill={prefill} onContinue={onContinue} onCancel={jest.fn()} />);
+    expect(screen.getByTestId('setup-opponent').props.value).toBe('UD NORTE');
+    expect(screen.getByTestId('setup-date').props.value).toBe('11/10/2026');
+    expect(screen.getByTestId('setup-time').props.value).toBe('');
+    expect(isSelected(screen.getByTestId('setup-away'))).toBe(true);
+    expect(screen.getByTestId('setup-competition').props.value).toBe('Liga Inventada');
+    expect(screen.getByTestId('setup-matchday').props.value).toBe('Jornada 4');
+
+    await fireEvent.press(screen.getByTestId('setup-continue'));
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(screen.getByTestId('setup-date-error')).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByTestId('setup-time'), '11:15');
+    await fireEvent.press(screen.getByTestId('setup-continue'));
+    expect(onContinue).toHaveBeenCalledWith({
+      opponent: 'UD NORTE',
+      scheduledAt: new Date(2026, 9, 11, 11, 15).getTime(),
+      periodsCount: 2,
+      periodMinutes: 25,
+      homeAway: 'AWAY',
+      competition: 'Liga Inventada',
+      matchday: 'Jornada 4',
+    });
+  });
+
+  it('con hora en el calendario la rellena, y lo ya escrito (initialDraft) manda sobre el calendario y los valores del equipo', async () => {
+    const prefill = { opponent: 'UD NORTE', scheduledAt: new Date(2026, 9, 11, 10, 30).getTime(), hasTime: true, homeAway: 'HOME' as const, competition: '', matchday: 'Jornada 4' };
+    const withTime = await render(<MatchSetupScreen team={team} now={NOW} prefill={prefill} onContinue={jest.fn()} onCancel={jest.fn()} />);
+    expect(withTime.getByTestId('setup-time').props.value).toBe('10:30');
+    await withTime.unmount();
+
+    const initialDraft = { opponent: 'OTRO CLUB', scheduledAt: new Date(2026, 9, 10, 9, 45).getTime(), periodsCount: 4, periodMinutes: 12, homeAway: null, competition: '', matchday: '' };
+    const back = await render(<MatchSetupScreen team={team} now={NOW} prefill={prefill} initialDraft={initialDraft} onContinue={jest.fn()} onCancel={jest.fn()} />);
+    expect(back.getByTestId('setup-opponent').props.value).toBe('OTRO CLUB');
+    expect(back.getByTestId('setup-date').props.value).toBe('10/10/2026');
+    expect(back.getByTestId('setup-time').props.value).toBe('09:45');
+    expect(isSelected(back.getByTestId('setup-periods-4'))).toBe(true);
+    expect(back.getByTestId('setup-minutes').props.value).toBe('12');
+    expect(isSelected(back.getByTestId('setup-periods-2'))).toBe(false);
+    // Lo escrito manda también en los opcionales: el calendario traía local y "Jornada 4", el borrador no.
+    expect(isSelected(back.getByTestId('setup-home'))).toBe(false);
+    expect(back.getByTestId('setup-matchday').props.value).toBe('');
+  });
 });

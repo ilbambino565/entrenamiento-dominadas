@@ -108,11 +108,17 @@ Partidos): se pega el texto copiado de la RFAF y `importCalendar` guarda los
 partidos del equipo buscándolo por su nombre en la federación (sin distinguir
 mayúsculas, tildes ni comillas); reimportar sustituye el calendario y conserva
 lo ya jugado; un texto sin partidos del equipo no borra lo guardado; sin nombre
-en la federación lleva a Equipo. Pendiente: (1) "Próximos partidos" en Partidos,
-que al tocar uno abre P5 con rival, fecha, local/visitante, competición y
-jornada rellenos, y (2) marcar el partido del calendario como jugado
-(`FixtureRepository.linkMatch`) al crearlo desde él. El nombre del equipo real
-vive solo en la app del entrenador, no en el repo.
+en la federación lleva a Equipo. Hecho también: **"Próximos partidos"** en
+Partidos (`upcomingFixtures`: sin jugar y de hoy en adelante, 5 como mucho):
+tocar uno abre P5 con rival, fecha, local/visitante, competición y "Jornada N"
+rellenos (`setupPrefillFromFixture`); si el calendario no trae hora la hora queda
+vacía y se pone a mano (no se inventa). P5 recuerda lo escrito al volver atrás
+desde la convocatoria (`initialDraft`). Al iniciar el partido, el del calendario
+se marca como jugado (`FixtureRepository.linkMatch`) y sale de la lista; si no se
+puede marcar solo se registra y el partido se abre igual. Pendiente: avisar en
+pantalla cuando el almacenamiento web se llena y poder descartar un partido
+atascado. El nombre del equipo real vive solo en la app del entrenador, no en el
+repo.
 
 **Hito M4 completo.** Siguiente (docs/06): M5/M6, ver el roadmap antes de
 empezar. Cosas conocidas pendientes: descartar

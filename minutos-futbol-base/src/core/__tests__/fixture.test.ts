@@ -1,4 +1,4 @@
-import { fixturesFromCalendar, mergeImportedFixtures, upcomingFixtures, type Fixture } from '../fixture';
+import { fixturesFromCalendar, mergeImportedFixtures, setupPrefillFromFixture, upcomingFixtures, type Fixture } from '../fixture';
 import type { RfafCalendar } from '../rfafCalendar';
 
 /** Clubes y fechas inventados. */
@@ -90,5 +90,13 @@ describe('upcomingFixtures', () => {
     expect(upcomingFixtures(fixtures, now)).toEqual([]);
     expect(fixtures).toHaveLength(1);
     expect(upcomingFixtures([], now)).toEqual([]);
+  });
+});
+
+describe('setupPrefillFromFixture', () => {
+  it('adelanta a P5 rival, fecha, hora si la hay, local/visitante, competición y jornada', () => {
+    const withTime = makeFixture(4, { hasTime: true, homeAway: 'AWAY', scheduledAt: day(11, 10, 2030, 10, 30), competition: 'Liga Inventada' });
+    expect(setupPrefillFromFixture(withTime)).toEqual({ opponent: 'RIVAL 4', scheduledAt: day(11, 10, 2030, 10, 30), hasTime: true, homeAway: 'AWAY', competition: 'Liga Inventada', matchday: 'Jornada 4' });
+    expect(setupPrefillFromFixture(makeFixture(7))).toMatchObject({ hasTime: false, competition: '', matchday: 'Jornada 7', homeAway: 'HOME' });
   });
 });
