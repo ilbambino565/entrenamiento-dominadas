@@ -13,7 +13,7 @@ el historial. Actualízala al cerrar cada hito.
   archivo `team-pack.js` que acompaña a la página privada y no está en git.
   Los tests usan nombres inventados (Ana, Bea, Cris…).
 
-## 8.2 Qué hay hecho (hitos M1, M2 parcial, M3 y la pantalla P8)
+## 8.2 Qué hay hecho (hitos M1, M2 parcial, M3, M4 y la pantalla P8)
 
 - `src/core`: dominio puro (eventos, reducer, tiempos, dibujos, plantilla).
 - `src/db`: SQLite versionado (migración 1: timeline; 2: equipo y plantilla;
@@ -32,7 +32,7 @@ el historial. Actualízala al cerrar cada hito.
 - Verificación: `npm run verify` (tsc + fronteras + jest). Exportación web:
   `npx expo export --platform web --output-dir dist-web`.
 
-## 8.3 Siguiente paso: hito M4 "Crear partido" + P0 recuperación
+## 8.3 Hito M4 "Crear partido" + P0 recuperación (hecho)
 
 Orden propuesto, en pasos pequeños (cada uno con tests y commit):
 
@@ -66,7 +66,18 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
    eliminado". No hay (todavía) forma de descartar el partido sin continuarlo:
    se termina desde P8. En web solo aplica dentro de la misma pestaña (la
    timeline no se guarda).
-7. **P1 Partidos**: lista de recientes con acceso al resumen.
+7. ✅ **P1 Partidos**: `MatchesHome` lista los 20 más recientes
+   (`sáb 27/09 · vs rival · estado`) bajo JUGAR PARTIDO y se relee al volver a
+   las pestañas. Un partido terminado (✓) abre el resumen `SummarySheet`
+   (`viewMatch`: motor propio que solo lee la timeline); uno listo o en curso
+   se reabre en P8; uno sin empezar (DRAFT) no responde. Limitaciones: la fila
+   no distingue "suspendido" (el motivo del final solo está en la timeline) y no
+   hay borrar partidos.
+
+**Hito M4 completo.** Siguiente (docs/06): M5/M6, ver el roadmap antes de
+empezar. Cosas conocidas pendientes: persistir la timeline en web, descartar
+un partido atascado, "suspendido" en la lista, y los 13 errores de
+`expo lint` anteriores a M4 (`ClockBar`, `useDragAndDrop`).
 
 ## 8.4 Cómo trabajar barato
 

@@ -10,6 +10,7 @@ import { createInMemoryMatchRepository } from '../../../db/inMemoryMatchReposito
 import { createInMemorySquadRepository } from '../../../db/inMemorySquadRepository';
 import { fieldTokenCenter, fieldTokenMetrics, fitPitch } from '../../live-match/geometry';
 import { AppShell } from '../AppShell';
+import { startMatch } from '../startMatch';
 import { firstTeamDraft } from '../FirstRunScreen';
 import type { Persistence } from '../persistence';
 
@@ -119,6 +120,33 @@ async function playThroughWizard(screen: RenderResult, opponent = 'Rival Prueba'
   await fireEvent.press(screen.getByTestId('setup-continue'));
   await fireEvent.press(await screen.findByTestId('convocation-continue'));
   await fireEvent.press(await screen.findByTestId('lineup-start'));
+}
+
+/** Crea un partido guardado sin pasar por la interfaz: `play` decide hasta dónde llega (nada → DRAFT, 'ready', 'finished'). */
+async function seedMatch(service: SquadService, opponent: string, play: 'draft' | 'ready' | 'finished', scheduledAt = T0): Promise<string> {
+  const { team, players } = service.getState();
+  const active = players.filter((p) => p.isActive).map((p) => p.id);
+  const lineup = active.slice(0, 7).map((playerId, i) => ({ playerId, position: { x: 0.2 + (i % 4) * 0.2, y: 0.3 + Math.floor(i / 4) * 0.3 }, ...(i === 0 ? { goalkeeper: true } : {}) }));
+  const active_ = await startMatch({
+    persistence: persistenceOf(service),
+    team: team!,
+    draft: { opponent, scheduledAt, periodsCount: 2, periodMinutes: 25, homeAway: null, competition: '', matchday: '' },
+    players,
+    convocated: active,
+    lineup,
+    bench: active.slice(7),
+    now,
+  });
+  const { engine } = active_.session;
+  await engine.load();
+  if (play !== 'draft') await engine.setLineup([...lineup], active.slice(7), T0 + 1000);
+  if (play === 'finished') {
+    await engine.start(T0 + 2000);
+    await engine.end('NORMAL', T0 + 2000 + 10 * MINUTE);
+  }
+  await active_.tracker.stop();
+  await active_.session.dispose();
+  return active_.matchId;
 }
 
 const setPack = (pack: unknown) => {
@@ -332,6 +360,65 @@ describe('AppShell — crear partido (P5-P7) y persistencia', () => {
     const second = await renderShell(service);
     expect(await second.findByTestId('play-match')).toBeTruthy();
     expect(second.queryByTestId('resume-continue')).toBeNull();
+  });
+
+  it('P1: lista los recientes con fecha, rival y estado; uno terminado abre su resumen y CERRAR vuelve a la lista', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo'], 'Ana');
+    const finished = await seedMatch(service, 'CD Norte', 'finished', new Date(2026, 8, 20, 10, 0).getTime());
+    const draft = await seedMatch(service, 'UD Sur', 'draft', new Date(2026, 8, 13, 10, 0).getTime());
+    const ready = await seedMatch(service, 'AD Este', 'ready', new Date(2026, 8, 27, 10, 0).getTime());
+    const screen = await renderShell(service);
+
+    await screen.findByTestId('recent-matches');
+    const order = within(screen.getByTestId('recent-matches')).getAllByTestId(/^match-opponent-/).map((n) => n.props.testID);
+    expect(order).toEqual([`match-opponent-${ready}`, `match-opponent-${finished}`, `match-opponent-${draft}`]);
+    expect(screen.getByTestId(`match-opponent-${finished}`)).toHaveTextContent('vs CD Norte');
+    expect(screen.getByTestId(`match-status-${finished}`)).toHaveTextContent('✓');
+    expect(screen.getByTestId(`match-status-${ready}`)).toHaveTextContent('listo');
+    expect(screen.getByTestId(`match-status-${draft}`)).toHaveTextContent('sin empezar');
+    expect(screen.getByTestId(`match-row-${draft}`).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(flat(screen.getByTestId(`match-row-${finished}`).props.style).minHeight).toBeGreaterThanOrEqual(56);
+
+    await fireEvent.press(screen.getByTestId(`match-row-${finished}`));
+    expect(await screen.findByText('Resumen · vs CD Norte')).toBeTruthy();
+    expect(screen.getByTestId(`summary-row-${idOf(service, 'Ana')}`)).toHaveTextContent(/Ana10:00100%/);
+    expect(screen.getByTestId(`summary-row-${idOf(service, 'Hugo')}`)).toHaveTextContent(/Hugo00:000%/);
+
+    await fireEvent.press(screen.getByTestId('summary-close'));
+    expect(await screen.findByTestId('recent-matches')).toBeTruthy();
+    expect(screen.queryByTestId('summary')).toBeNull();
+  });
+
+  it('P1: un partido listo (READY) se reabre desde la lista y un partido sin empezar no responde', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo'], 'Ana');
+    const ready = await seedMatch(service, 'AD Este', 'ready');
+    const draft = await seedMatch(service, 'UD Sur', 'draft', T0 - 86_400_000);
+    const screen = await renderShell(service);
+
+    await fireEvent.press(await screen.findByTestId(`match-row-${draft}`));
+    expect(screen.queryByTestId('pitch')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId(`match-row-${ready}`));
+    const pitch = await screen.findByTestId('pitch');
+    expect(within(pitch).getAllByTestId(/^token-id-\d+$/)).toHaveLength(7);
+    expect(screen.getByTestId('main-button')).toHaveTextContent('INICIAR');
+    expect(screen.getByTestId('team-line')).toHaveTextContent(/AD Este/);
+  });
+
+  it('P1: un partido recién jugado aparece en la lista al volver a Partidos', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const screen = await renderShell(service);
+    expect(await screen.findByTestId('play-match')).toBeTruthy();
+    expect(screen.queryByTestId('recent-matches')).toBeNull();
+
+    await playThroughWizard(screen, 'CD Nuevo');
+    await screen.findByTestId('pitch');
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    await fireEvent(screen.getByTestId('exit-button'), 'longPress');
+    expect(await screen.findByText('vs CD Nuevo')).toBeTruthy();
   });
 
   it('← desde cada paso vuelve al anterior y desde P5 a Partidos, sin crear nada', async () => {

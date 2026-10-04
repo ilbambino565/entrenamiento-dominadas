@@ -1,6 +1,7 @@
 import {
   defaultMatchSetup,
   formatDateText,
+  formatShortDate,
   formatTimeText,
   normalizeMatchSetup,
   parseDateTime,
@@ -19,6 +20,12 @@ describe('matchSetup: fecha y hora', () => {
     expect(formatDateText(NOW)).toBe('04/10/2026');
     expect(formatTimeText(NOW)).toBe('10:30');
     expect(parseDateTime(formatDateText(NOW), formatTimeText(NOW))).toBe(NOW);
+  });
+
+  it('la fecha corta lleva el día de la semana en español', () => {
+    expect(formatShortDate(NOW)).toBe('dom 04/10');
+    expect(formatShortDate(new Date(2026, 8, 27, 10, 0).getTime())).toBe('dom 27/09');
+    expect(formatShortDate(new Date(2026, 8, 26, 10, 0).getTime())).toBe('sáb 26/09');
   });
 
   it('acepta separadores alternativos, días sin cero y espacios', () => {

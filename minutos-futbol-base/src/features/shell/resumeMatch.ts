@@ -21,8 +21,9 @@ export interface ResumableMatch {
   squadIds: string[];
 }
 
-export async function findResumable(persistence: Persistence, now: number): Promise<ResumableMatch | null> {
-  const match = await persistence.matches.findInProgressMatch();
+/** Sin `target`, el partido en juego más reciente (P0); con él, ese partido concreto (abrirlo desde la lista). */
+export async function findResumable(persistence: Persistence, now: number, target?: Match): Promise<ResumableMatch | null> {
+  const match = target ?? (await persistence.matches.findInProgressMatch());
   if (!match) return null;
   const squadIds = (await persistence.matches.listMatchPlayers(match.id)).map((p) => p.playerId);
   const events = await persistence.events.loadEvents(match.id);

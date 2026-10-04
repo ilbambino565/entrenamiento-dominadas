@@ -47,6 +47,14 @@ export function formatTimeText(ms: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'] as const;
+
+/** `sáb 27/09` en hora local: la fecha corta de la lista de partidos. */
+export function formatShortDate(ms: number): string {
+  const d = new Date(ms);
+  return `${WEEKDAYS[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+}
+
 /**
  * `dd/mm/aaaa` + `hh:mm` → epoch ms en hora local. Acepta `-` y `.` como
  * separador de fecha y `.` en la hora. Null si el formato no cuadra o la fecha

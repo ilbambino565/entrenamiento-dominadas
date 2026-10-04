@@ -7,7 +7,8 @@ import { teamMatchConfig } from '../../core/squad';
 import { readTeamPack } from '../../core/teamPack';
 import { useSquadState } from '../../state';
 import { useTheme } from '../../ui/theme';
-import { LiveMatchScreen } from '../live-match';
+import type { Match } from '../../core/match';
+import { LiveMatchScreen, SummarySheet } from '../live-match';
 import { ConvocationScreen, LineupScreen, MatchSetupScreen } from '../match-setup';
 import { PlayerFormScreen, SquadScreen, TeamScreen } from '../squad';
 import type { PlayerFormResult } from '../squad/PlayerFormScreen';
@@ -18,6 +19,7 @@ import type { Persistence } from './persistence';
 import { ResumeMatchScreen } from './ResumeMatchScreen';
 import { findResumable, resumeMatch, type ResumableMatch } from './resumeMatch';
 import { endMatch, startMatch, type ActiveMatch } from './startMatch';
+import { viewMatch, type ViewedMatch } from './viewMatch';
 import { TabBar, type Tab } from './TabBar';
 
 /**
@@ -53,9 +55,11 @@ type Route =
   | { kind: 'tabs' }
   | { kind: 'player'; playerId: string | null }
   | ({ kind: 'new' } & NewMatchStep)
-  | { kind: 'match'; match: ActiveMatch };
+  | { kind: 'match'; match: ActiveMatch }
+  | { kind: 'summary'; viewed: ViewedMatch };
 
 const TABS_ROUTE: Route = { kind: 'tabs' };
+const RECENT_MATCHES = 20;
 
 /**
  * Carga y siembra del primer arranque. Nunca rechaza: un fallo de carga deja
@@ -93,8 +97,14 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   const [scrollToEndKey, setScrollToEndKey] = useState(0);
   // P0: `undefined` = aún sin comprobar; `null` = nada que recuperar.
   const [resumable, setResumable] = useState<ResumableMatch | null | undefined>(undefined);
+  const [recent, setRecent] = useState<Match[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+
+  const closeSummary = useCallback((viewed: ViewedMatch) => {
+    viewed.session.dispose().catch((error: unknown) => console.warn('[AppShell] no se pudo liberar la sesión', error));
+    setRoute(TABS_ROUTE);
+  }, []);
 
   // Botón/gesto atrás de Android: cierra la ficha, vuelve a Partidos y nunca
   // saca de un partido (se sale con SALIR, mantener pulsado). En iOS y web no hace nada.
@@ -105,6 +115,10 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
         return true;
       }
       if (route.kind === 'match') return true;
+      if (route.kind === 'summary') {
+        closeSummary(route.viewed);
+        return true;
+      }
       if (route.kind === 'new') {
         setStartError(null);
         setRoute(route.step === 'lineup' ? { kind: 'new', step: 'squad', draft: route.draft } : route.step === 'squad' ? { kind: 'new', step: 'data' } : TABS_ROUTE);
@@ -117,7 +131,7 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
       return false;
     });
     return () => subscription.remove();
-  }, [route, tab]);
+  }, [route, tab, closeSummary]);
 
   useEffect(() => {
     let alive = true;
@@ -146,6 +160,39 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
       alive = false;
     };
   }, [booted, hasTeam, resumable, persistence, now]);
+
+  // La lista de recientes se vuelve a leer cada vez que se vuelve a las pestañas (un partido nuevo, uno terminado…).
+  const onTabs = route.kind === 'tabs';
+  useEffect(() => {
+    if (!booted || !hasTeam || !onTabs) return;
+    let alive = true;
+    persistence.matches
+      .listRecentMatches(RECENT_MATCHES)
+      .then((list) => alive && setRecent(list))
+      .catch((error: unknown) => console.warn('[AppShell] no se pudo leer la lista de partidos', error));
+    return () => {
+      alive = false;
+    };
+  }, [booted, hasTeam, onTabs, persistence, resumable]);
+
+  const openMatch = useCallback(
+    async (match: Match) => {
+      const team = service.getState().team;
+      if (!team) return;
+      const players = service.getState().players;
+      try {
+        if (match.status === 'FINISHED') {
+          setRoute({ kind: 'summary', viewed: await viewMatch({ persistence, team, players, match, now }) });
+        } else {
+          const found = await findResumable(persistence, now(), match);
+          if (found) setRoute({ kind: 'match', match: resumeMatch({ persistence, team, players, resumable: found, now }) });
+        }
+      } catch (error) {
+        console.warn('[AppShell] no se pudo abrir el partido', error);
+      }
+    },
+    [service, persistence, now],
+  );
 
   const continueResumed = useCallback(
     (found: ResumableMatch) => {
@@ -248,6 +295,20 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
       />
     );
   }
+  if (route.kind === 'summary') {
+    const { viewed } = route;
+    return (
+      <SummarySheet
+        visible
+        onClose={() => closeSummary(viewed)}
+        engine={viewed.session.engine}
+        state={viewed.state}
+        players={viewed.players}
+        rival={viewed.match.opponent}
+        now={now()}
+      />
+    );
+  }
   if (route.kind === 'match') {
     const { match } = route;
     return (
@@ -270,7 +331,7 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
-        {tab === 'matches' ? <MatchesHome service={service} onPlay={play} /> : null}
+        {tab === 'matches' ? <MatchesHome service={service} onPlay={play} recent={recent} onOpenMatch={(m) => void openMatch(m)} /> : null}
         {tab === 'squad' ? <SquadScreen service={service} onAddPlayer={addPlayer} onEditPlayer={editPlayer} scrollToEndKey={scrollToEndKey} /> : null}
         {tab === 'team' ? <TeamScreen service={service} /> : null}
       </View>
