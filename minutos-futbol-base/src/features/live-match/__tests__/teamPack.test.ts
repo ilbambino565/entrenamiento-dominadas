@@ -57,6 +57,35 @@ describe('paquete de equipo', () => {
     expect(bench).toEqual(['hilda', 'ines']);
   });
 
+  it('acepta un dibujo propio y coloca a los titulares por filas: defensa (izquierda→derecha), medio, ataque', () => {
+    const pack = parseTeamPack({ ...PACK, formation: '3-1-2', starters: ['ana', 'bea', 'cris', 'dani', 'eva', 'fani', 'gala'] })!;
+    expect(pack.formation).toBe('3-1-2');
+    const { lineup, bench } = packLineup(pack, 7);
+    expect(lineup[0]).toEqual({ playerId: 'ana', position: GOALKEEPER_SLOT, goalkeeper: true });
+    expect(lineup.slice(1).map((e) => e.position)).toEqual(formationSlots('3-1-2'));
+    const pos = (id: string) => lineup.find((e) => e.playerId === id)!.position;
+    // Defensa: bea izquierda, cris centro, dani derecha (x creciente, misma y); eva mediocentro; fani y gala arriba.
+    expect(pos('bea').x).toBeLessThan(pos('cris').x);
+    expect(pos('cris').x).toBeLessThan(pos('dani').x);
+    expect(pos('bea').y).toBe(pos('dani').y);
+    expect(pos('eva').x).toBe(0.5);
+    expect(pos('eva').y).toBeLessThan(pos('cris').y);
+    expect(pos('fani').y).toBeLessThan(pos('eva').y);
+    expect(pos('fani').x).toBeLessThan(pos('gala').x);
+    expect(bench).toEqual(['hilda', 'ines']);
+  });
+
+  it('un dibujo que no es tal, o que no cuadra con el formato, se ignora y se usa el de referencia', () => {
+    expect(parseTeamPack({ ...PACK, formation: 'tres' })?.formation).toBeUndefined();
+    expect(parseTeamPack({ ...PACK, formation: 42 })?.formation).toBeUndefined();
+    expect(parseTeamPack({ ...PACK, formation: '' })?.formation).toBeUndefined();
+    const eight = parseTeamPack({ ...PACK, formation: '3-3-1' })!; // vale para F8, no para F7
+    expect(eight.formation).toBe('3-3-1');
+    expect(packLineup(eight, 7).lineup.slice(1).map((e) => e.position)).toEqual(formationSlots('2-3-1'));
+    const eightStarters = parseTeamPack({ ...PACK, formation: '3-3-1', starters: [...PACK.starters, 'hilda'] })!;
+    expect(packLineup(eightStarters, 8).lineup.slice(1).map((e) => e.position)).toEqual(formationSlots('3-3-1'));
+  });
+
   it('createDemoSession usa el paquete global si existe y el equipo de prueba si no', async () => {
     (globalThis as { __TEAM_PACK__?: unknown }).__TEAM_PACK__ = PACK;
     const real = createDemoSession();

@@ -1,6 +1,6 @@
 import type { LineupEntry } from '../../core';
 import type { PlayerInfo } from './demoTeam';
-import { GOALKEEPER_SLOT, formationSlots } from './formations';
+import { GOALKEEPER_SLOT, formationSlots, isValidFormation, parseFormation } from './formations';
 
 /**
  * "Paquete de equipo": plantilla real inyectada desde fuera del repositorio.
@@ -16,6 +16,12 @@ export interface TeamPack {
   players: PlayerInfo[];
   /** Titulares en orden (el portero puede ir en cualquier posición). Por defecto los primeros. */
   starters?: string[];
+  /**
+   * Dibujo de los titulares de campo ('3-1-2'…): los titulares se reparten por
+   * filas de la defensa al ataque y, en cada fila, de izquierda a derecha
+   * mirando hacia la portería rival. Si no cuadra con el formato, 2-3-1.
+   */
+  formation?: string;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
@@ -43,6 +49,7 @@ export function parseTeamPack(source: unknown): TeamPack | null {
   if (Array.isArray(source.starters)) {
     pack.starters = source.starters.filter((id): id is string => typeof id === 'string' && ids.has(id));
   }
+  if (typeof source.formation === 'string' && parseFormation(source.formation)) pack.formation = source.formation;
   return pack;
 }
 
@@ -55,16 +62,21 @@ export interface ResolvedLineup {
   bench: string[];
 }
 
+const DEFAULT_FORMATION: Record<number, string> = { 7: '2-3-1', 8: '3-3-1', 11: '4-4-2' };
+
 /**
- * Titulares colocados en 2-3-1 con el portero (si lo hay) en su área; si no
- * hay portero declarado, el último titular ocupa ese hueco sin la marca.
+ * Titulares colocados en el dibujo del paquete (o el de referencia del formato)
+ * con el portero (si lo hay) en su área; si no hay portero declarado, el último
+ * titular ocupa ese hueco sin la marca.
  */
 export function packLineup(pack: TeamPack, playersOnField: number): ResolvedLineup {
   const ids = pack.players.map((p) => p.id);
   const starters = (pack.starters && pack.starters.length > 0 ? pack.starters : ids).slice(0, playersOnField);
   const keeperId = starters.find((id) => pack.players.find((p) => p.id === id)?.isGoalkeeper) ?? null;
   const outfield = starters.filter((id) => id !== keeperId);
-  const slots = formationSlots(playersOnField === 7 ? '2-3-1' : playersOnField === 8 ? '3-3-1' : '4-4-2');
+  const fallback = DEFAULT_FORMATION[playersOnField] ?? '4-4-2';
+  const formation = pack.formation && isValidFormation(pack.formation, playersOnField) ? pack.formation : fallback;
+  const slots = formationSlots(formation);
 
   const lineup: LineupEntry[] = [];
   if (keeperId) lineup.push({ playerId: keeperId, position: GOALKEEPER_SLOT, goalkeeper: true });
