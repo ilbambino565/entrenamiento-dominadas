@@ -25,6 +25,7 @@ Run lint and typecheck before declaring any task done.
 
 ## Navigation & Routing
 
+- Current state (milestone M3): navigation is a provisional in-React `AppShell` (`src/features/shell`, see `docs/05-navegacion-pantallas.md` §5.1) and `src/app/` does not exist yet. Expo Router arrives with several matches and deep links; the rule below applies from then on.
 - Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
 - Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
 - Docs: https://docs.expo.dev/router/introduction.md

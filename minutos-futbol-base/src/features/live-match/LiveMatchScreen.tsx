@@ -23,6 +23,12 @@ export interface LiveMatchScreenProps {
   /** Alineación inicial (por defecto, la del equipo de prueba). */
   lineup?: readonly LineupEntry[];
   bench?: readonly string[];
+  /**
+   * Volver al inicio. Lo ofrece el menú ⋯ (SALIR, solo antes del pitido o con
+   * el partido terminado) y el resumen (VOLVER AL INICIO). Sin él la pantalla
+   * no tiene salida, como hasta ahora en la demo.
+   */
+  onExit?: () => void;
 }
 
 /**
@@ -38,6 +44,7 @@ export function LiveMatchScreen({
   teamName = DEMO_TEAM_NAME,
   lineup = DEMO_LINEUP,
   bench = DEMO_BENCH,
+  onExit,
 }: LiveMatchScreenProps) {
   const { engine } = session;
   const { colors } = useTheme();
@@ -94,6 +101,7 @@ export function LiveMatchScreen({
         teamName={teamName}
         notify={notify}
         onOpenSummary={openSummary}
+        onExit={onExit}
       />
       {/* Quien arrastra se pone por encima del otro contenedor para no quedar tapado. */}
       <View style={[styles.pitchArea, drag.draggingFrom === 'FIELD' && styles.onTop]}>
@@ -103,7 +111,7 @@ export function LiveMatchScreen({
         <Bench state={state} players={players} views={views} controller={controller} drag={drag} now={now} />
       </View>
       <Toast message={toast.message} />
-      <SummarySheet visible={summaryOpen} onClose={closeSummary} engine={engine} state={state} players={players} rival={rival} now={now} />
+      <SummarySheet visible={summaryOpen} onClose={closeSummary} onExit={onExit} engine={engine} state={state} players={players} rival={rival} now={now} />
     </SafeAreaView>
   );
 }

@@ -1,12 +1,11 @@
-/** Equipo de prueba F7 para ver la pantalla sin base de datos ni navegación. */
-export interface PlayerInfo {
-  id: string;
-  name: string;
-  number: number;
-  isGoalkeeper?: boolean;
-  /** Foto (data URI o archivo local). Sin ella la ficha muestra el dorsal grande. */
-  photoUri?: string;
-}
+import type { PlayerInfo } from '../../core/team';
+
+/**
+ * Equipo de prueba F7 para ver la pantalla sin base de datos ni navegación.
+ * `PlayerInfo` vive en el dominio (core/team.ts); se re-exporta desde aquí
+ * para que los componentes de la pantalla sigan importándolo igual.
+ */
+export type { PlayerInfo } from '../../core/team';
 
 export const DEMO_PLAYERS: readonly PlayerInfo[] = [
   { id: 'hugo', name: 'Hugo', number: 5 },

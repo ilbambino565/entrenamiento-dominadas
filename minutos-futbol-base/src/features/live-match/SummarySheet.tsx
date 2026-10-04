@@ -7,6 +7,8 @@ import type { PlayerInfo } from './demoTeam';
 export interface SummarySheetProps {
   visible: boolean;
   onClose: () => void;
+  /** Volver al inicio desde el resumen (el partido ya ha terminado). Sin él solo hay CERRAR. */
+  onExit?: () => void;
   engine: MatchEngine;
   state: MatchState;
   players: Record<string, PlayerInfo>;
@@ -15,7 +17,7 @@ export interface SummarySheetProps {
 }
 
 /** Resumen P9 básico: tabla en orden de convocatoria, máx/mín/media y cambios. */
-export function SummarySheet({ visible, onClose, engine, state, players, rival, now }: SummarySheetProps) {
+export function SummarySheet({ visible, onClose, onExit, engine, state, players, rival, now }: SummarySheetProps) {
   const { colors, sizes } = useTheme();
   if (!visible) return null;
 
@@ -70,13 +72,28 @@ export function SummarySheet({ visible, onClose, engine, state, players, rival, 
             </Text>
           ))}
         </ScrollView>
+        {/* Con salida, VOLVER AL INICIO es la acción principal y CERRAR pasa a secundaria (solo borde). */}
+        {onExit ? (
+          <Pressable
+            onPress={onExit}
+            accessibilityRole="button"
+            testID="exit-match"
+            style={[styles.close, { minHeight: sizes.buttonHeight, backgroundColor: colors.accent }]}
+          >
+            <Text style={[styles.closeText, { color: colors.onAccent }]}>VOLVER AL INICIO</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={onClose}
           accessibilityRole="button"
           testID="summary-close"
-          style={[styles.close, { minHeight: sizes.buttonHeight, backgroundColor: colors.accent }]}
+          style={[
+            styles.close,
+            { minHeight: sizes.buttonHeight },
+            onExit ? { borderWidth: 2, borderColor: colors.accent, backgroundColor: colors.surface } : { backgroundColor: colors.accent },
+          ]}
         >
-          <Text style={[styles.closeText, { color: colors.onAccent }]}>CERRAR</Text>
+          <Text style={[styles.closeText, { color: onExit ? colors.accent : colors.onAccent }]}>CERRAR</Text>
         </Pressable>
       </View>
     </Modal>

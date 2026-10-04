@@ -1,12 +1,15 @@
 /**
  * Esquema SQLite: SQL plano versionado con `PRAGMA user_version`.
  *
- * Hito M1: solo la timeline (`match_event`) y `app_meta`. Las tablas de equipo,
- * plantilla, partido y proyecciones llegan en el hito M2 como migraciones
- * nuevas, nunca editando la v1: una base ya migrada no volvería a ejecutarla.
+ * - v1 (hito M1): la timeline (`match_event`) y `app_meta`.
+ * - v2 (hito M3): equipo y plantilla (`team`, `player`).
+ *
+ * Las tablas de partido y las proyecciones llegarán como migraciones nuevas.
+ * Una migración publicada NUNCA se edita: una base ya migrada no volvería a
+ * ejecutarla y quedaría distinta de una base nueva.
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export interface Migration {
   /** Consecutivo desde 1. Se escribe en `PRAGMA user_version` al aplicarla. */
@@ -77,6 +80,53 @@ export const MIGRATIONS: readonly Migration[] = [
       // del sistema), avisos de integridad, etc. La versión del esquema NO va
       // aquí sino en `PRAGMA user_version`, que es transaccional con el DDL.
       'CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+    ],
+  },
+  {
+    version: 2,
+    statements: [
+      // Equipo (MVP: uno por instalación). Columnas = `core/team.ts` en
+      // snake_case. `default_formation`, `periods_count` y `period_duration_ms`
+      // no estaban en docs/02: son los valores por defecto que la pantalla
+      // Equipo propone al crear un partido (ver nota en docs/02 §2.3).
+      // `deleted_at` existe por la regla general de sincronización aunque el
+      // MVP no borre equipos: `getTeam` ya filtra por él.
+      `CREATE TABLE team (
+        id                 TEXT PRIMARY KEY,
+        name               TEXT NOT NULL,
+        category           TEXT,
+        default_format     TEXT NOT NULL DEFAULT 'F7',
+        default_formation  TEXT,
+        periods_count      INTEGER NOT NULL DEFAULT 2,
+        period_duration_ms INTEGER NOT NULL DEFAULT 1500000,
+        display_name_mode  TEXT NOT NULL DEFAULT 'full',
+        created_at         INTEGER NOT NULL,
+        updated_at         INTEGER NOT NULL,
+        deleted_at         INTEGER
+      )`,
+      // Plantilla. Booleanos como INTEGER 0/1. `photo_uri` admite un data URI
+      // (JPEG pequeño) además de un archivo local: así la foto viaja con la
+      // fila y sobrevive a una copia o a la web. Eliminar = anonimizar y poner
+      // `deleted_at` (su histórico en la timeline sigue apuntando a su id), por
+      // eso no hay ON DELETE: nunca se borra físicamente.
+      `CREATE TABLE player (
+        id             TEXT PRIMARY KEY,
+        team_id        TEXT NOT NULL REFERENCES team(id),
+        first_name     TEXT NOT NULL,
+        last_name      TEXT,
+        shirt_number   INTEGER,
+        is_goalkeeper  INTEGER NOT NULL DEFAULT 0,
+        is_active      INTEGER NOT NULL DEFAULT 1,
+        photo_uri      TEXT,
+        photo_consent  INTEGER NOT NULL DEFAULT 0,
+        sort_order     INTEGER NOT NULL,
+        created_at     INTEGER NOT NULL,
+        updated_at     INTEGER NOT NULL,
+        deleted_at     INTEGER
+      )`,
+      // La consulta de la plantilla: jugadores de un equipo en orden manual
+      // (`listPlayers`: WHERE team_id = ? ORDER BY sort_order, created_at, id).
+      'CREATE INDEX idx_player_team_order ON player (team_id, sort_order)',
     ],
   },
 ];

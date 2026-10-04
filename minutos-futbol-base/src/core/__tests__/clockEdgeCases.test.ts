@@ -35,6 +35,13 @@ const iv = (playerId: string, start: number, end: number | null): PlayerInterval
   endEventId: end == null ? null : 'evt-out',
 });
 
+/**
+ * La propiedad de abajo (200 partidos aleatorios) roza los 5 s por defecto
+ * cuando toda la suite corre en paralelo: se le da margen en vez de bajar
+ * las ejecuciones.
+ */
+const PROPERTY_TIMEOUT_MS = 30_000;
+
 describe('verificado: ejemplo 12:30 + 8:15 = 20:45 a mano, con pausa dentro del segundo tramo', () => {
   it('la pausa entre medias no suma y el total sigue siendo 20:45', () => {
     const ev = new EventFactory();
@@ -187,7 +194,7 @@ describe('verificado: propiedad con timestamps NO monótonos (saltos del reloj d
       }),
       { numRuns: 200 },
     );
-  });
+  }, PROPERTY_TIMEOUT_MS);
 });
 
 describe('reloj del sistema hacia atrás', () => {

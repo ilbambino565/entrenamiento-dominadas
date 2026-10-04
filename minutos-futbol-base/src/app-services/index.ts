@@ -8,3 +8,12 @@ export {
 } from './matchEngine';
 export { createCameraTimelineBridge } from './cameraTimelineBridge';
 export { createMatchSession, type MatchSession, type MatchSessionDeps } from './createMatchSession';
+export {
+  createSquadService,
+  SquadError,
+  type MatchSetup,
+  type SquadErrorCode,
+  type SquadService,
+  type SquadServiceDeps,
+  type SquadState,
+} from './squadService';

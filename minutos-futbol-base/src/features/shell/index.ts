@@ -1,0 +1,8 @@
+/** Navegación provisional por pestañas, primer arranque e inicio de partido con la plantilla real (docs/05 §5.1, nota). */
+export { AppShell, bootSquad, type AppShellProps } from './AppShell';
+export { BootScreen, type BootScreenProps } from './BootScreen';
+export { FirstRunScreen, firstTeamDraft, type FirstRunScreenProps } from './FirstRunScreen';
+export { MatchesHome, PLAY_BUTTON_HEIGHT, plannedFormation, type MatchesHomeProps } from './MatchesHome';
+export { startMatch, type ActiveMatch } from './startMatch';
+export { TabBar, TABS, TAB_HEIGHT, type Tab, type TabBarProps, type TabItem } from './TabBar';
+export { openSquadRepository } from './openSquadRepository';

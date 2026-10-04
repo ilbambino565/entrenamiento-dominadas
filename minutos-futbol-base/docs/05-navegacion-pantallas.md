@@ -2,6 +2,19 @@
 
 ## 5.1 Mapa de navegación (Expo Router)
 
+> **Nota (estado actual):** la navegación es un **AppShell propio con estado en
+> React** (`src/features/shell/AppShell.tsx`), sin Expo Router todavía: tres
+> pestañas abajo (⚽ Partidos, 👥 Plantilla, ⚙️ Equipo) y una ruta modal a
+> pantalla completa, sin pestañas, para "Jugador" (alta/edición) y para
+> "Partido en vivo". El primer arranque sin equipo muestra una pantalla mínima
+> (nombre del equipo → EMPEZAR crea el equipo F7 y abre Plantilla); si existe
+> un paquete de equipo (`globalThis.__TEAM_PACK__`, `core/teamPack.ts`) se
+> importa como siembra antes de pedir nada. Desde la pantalla de partido se
+> vuelve al inicio con SALIR (menú ⋯, mantener pulsado; solo antes del pitido o
+> con el partido terminado) o con VOLVER AL INICIO en el resumen. Expo Router
+> llegará cuando haya varios partidos y enlaces profundos; las pantallas ya
+> reciben todo por props y no cambiarán. El mapa de abajo es el objetivo.
+
 ```
 Arranque
   └─ ¿Partido en curso? ──sí──▶ [Diálogo: Hay un partido en curso] ──CONTINUAR──▶ Partido en vivo

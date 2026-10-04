@@ -19,9 +19,20 @@ export interface ClockBarProps {
   teamName: string;
   notify: Notify;
   onOpenSummary: () => void;
+  /** Salir de la pantalla; sin él el menú no ofrece SALIR. */
+  onExit?: () => void;
 }
 
 const LONG_PRESS_MS = 800;
+
+/**
+ * Salir solo cuando no se deja ningún reloj a medias: antes del pitido
+ * (DRAFT, READY) o con el partido terminado. En marcha, en pausa o en el
+ * descanso hay que FINALIZAR o SUSPENDER primero, que quedan registrados.
+ */
+export function canExitMatch(status: MatchState['status']): boolean {
+  return status === 'DRAFT' || status === 'READY' || status === 'FINISHED';
+}
 
 /** Botón principal según el estado (docs/03 §3.1): solo el siguiente paso lógico. */
 function mainAction(state: MatchState, engine: MatchEngine, onOpenSummary: () => void): { label: string; run: () => Promise<unknown> | void } {
@@ -65,7 +76,7 @@ function periodLabel(state: MatchState, blinkOn: boolean): { text: string; dim: 
   }
 }
 
-export function ClockBar({ engine, state, now, players, rival, teamName, notify, onOpenSummary }: ClockBarProps) {
+export function ClockBar({ engine, state, now, players, rival, teamName, notify, onOpenSummary, onExit }: ClockBarProps) {
   const { colors, sizes } = useTheme();
   // En móvil el reloj baja de 60 a 46 px: sigue leyéndose de pie y deja alto al campo.
   const narrow = useWindowDimensions().width < NARROW_SCREEN_WIDTH;
@@ -105,6 +116,12 @@ export function ClockBar({ engine, state, now, players, rival, teamName, notify,
   const end = async () => {
     setMenuOpen(false);
     if (await guarded(() => engine.end(suspending ? 'SUSPENDED' : 'NORMAL'), notify, 'el final')) onOpenSummary();
+  };
+
+  const canExit = onExit !== undefined && canExitMatch(state.status);
+  const exit = () => {
+    setMenuOpen(false);
+    onExit?.();
   };
 
   // Dibujos: antes del pitido se reescribe la alineación (un solo evento, un
@@ -204,10 +221,11 @@ export function ClockBar({ engine, state, now, players, rival, teamName, notify,
         <View style={styles.menuRow}>
           {canHalftime ? holdButton('DESCANSO', halftime, 'halftime-button') : null}
           {canEnd ? holdButton(suspending ? 'SUSPENDER' : 'FINALIZAR', () => void end(), 'end-button') : null}
-          {!canHalftime && !canEnd && formations.length === 0 ? (
+          {canExit ? holdButton('SALIR', exit, 'exit-button') : null}
+          {!canHalftime && !canEnd && !canExit && formations.length === 0 ? (
             <Text style={{ color: colors.textMuted }}>Sin acciones en este estado</Text>
           ) : null}
-          {hint && (canHalftime || canEnd) ? (
+          {hint && (canHalftime || canEnd || canExit) ? (
             <Text style={[styles.hint, { color: colors.textMuted }]} testID="hold-hint">
               mantén pulsado
             </Text>

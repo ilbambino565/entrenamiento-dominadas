@@ -57,7 +57,7 @@ estadísticas) existe para alimentar ese momento o para explotar sus datos.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ UI (Expo Router, componentes RN)                             │
+│ UI (componentes RN; shell propio hasta Expo Router, doc 5)   │
 │  Pantallas · Campo · Banquillo · Tarjeta jugador · Reloj     │
 │  Gestos: RNGH + Reanimated (hilo UI)                         │
 │  features/camera: CameraPanel y CameraStatusBadge (ocultos)  │
@@ -96,9 +96,15 @@ importa `core` y `lib`; `camera` solo `camera`, `events` y `lib` (nunca `core`,
 que existe la cámara y la cámara no sabe que existe el partido: se comunican por
 el EventBus y por un puente de 30 líneas. Detalle en el [doc 7](07-camara-y-timeline.md).
 
-Nota sobre Drizzle: el diseño inicial lo proponía; de momento las migraciones
-son SQL plano versionado con `PRAGMA user_version` (menos dependencias). Se
-reconsiderará cuando lleguen las tablas de equipo y plantilla (hito M2).
+Nota sobre Drizzle: el diseño inicial lo proponía; las migraciones son SQL
+plano versionado con `PRAGMA user_version` (menos dependencias). Las tablas de
+equipo y plantilla (hito M3, migración 2) se añadieron igual, en SQL plano:
+solo se reconsiderará si el número de tablas lo justifica.
+
+Nota sobre la navegación: Expo Router sigue siendo el objetivo, pero hoy la
+app navega con un `AppShell` propio con estado en React
+(`src/features/shell`): tres pestañas y dos rutas a pantalla completa. El
+motivo y el momento de cambiar están en el [doc 5](05-navegacion-pantallas.md) §5.1.
 
 ### Flujo de una acción (p. ej. sustitución directa)
 
@@ -120,9 +126,9 @@ un estado visible que no esté guardado.
 | Necesidad | Elección | Motivo |
 |-----------|----------|--------|
 | App | **Expo (SDK actual) + React Native + TypeScript estricto** | Una base de código para iOS y Android, OTA updates, EAS Build |
-| Navegación | **Expo Router** | Basado en archivos, deep links gratis, sencillo |
+| Navegación | **Expo Router** (objetivo; hoy un shell propio por pestañas, [doc 5](05-navegacion-pantallas.md) §5.1) | Basado en archivos, deep links gratis, sencillo |
 | BD local | **expo-sqlite** (modo WAL, `synchronous=FULL`) | Transaccional y duradero; API síncrona disponible |
-| Migraciones | **SQL plano versionado** (`PRAGMA user_version`) | Sin dependencias; se reconsiderará Drizzle en el hito M2 |
+| Migraciones | **SQL plano versionado** (`PRAGMA user_version`) | Sin dependencias; también para `team` y `player` (migración 2) |
 | Estado | **Zustand** | Mínimo, sin boilerplate; selectores para evitar re-renders |
 | Gestos | **react-native-gesture-handler + Reanimated** | Arrastre a 60 fps en el hilo UI |
 | Háptica | expo-haptics | Confirmación sin mirar la pantalla |
@@ -188,7 +194,7 @@ reutilizando la misma lógica.
 ```
 minutos-futbol-base/
 ├── src/
-│   ├── app/                     # Expo Router (solo pantallas y layout; hitos M3-M6)
+│   ├── app/                     # Expo Router (objetivo; hoy navega features/shell, doc 5 §5.1)
 │   │   ├── _layout.tsx          # Proveedores, BD, comprobación de partido en curso
 │   │   ├── (tabs)/
 │   │   │   ├── _layout.tsx
@@ -236,8 +242,9 @@ minutos-futbol-base/
 │   ├── features/
 │   │   ├── camera/              # CameraPanel, CameraStatusBadge (tras feature flag)
 │   │   ├── live-match/          # Pitch, Bench, PlayerToken, DragLayer, ClockBar, UndoButton
+│   │   ├── shell/               # AppShell provisional: pestañas, primer arranque, JUGAR PARTIDO
 │   │   ├── lineup/
-│   │   ├── squad/
+│   │   ├── squad/               # P2-P4: SquadScreen, PlayerFormScreen, TeamScreen, photoPicker
 │   │   └── summary/
 │   ├── ui/                      # Botones, tema claro/oscuro, tipografía
 │   ├── sync/                    # FASE 3 (vacío en el MVP)

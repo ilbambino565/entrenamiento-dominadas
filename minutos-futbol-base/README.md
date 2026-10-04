@@ -9,12 +9,18 @@ Prioridad: **VELOCIDAD > SIMPLICIDAD > FIABILIDAD > ESTADÍSTICAS**.
 
 Formato inicial: fútbol 7. Arquitectura preparada para fútbol 8 y fútbol 11.
 
-> Estado: **pantalla de partido operativa con equipo de prueba** (hitos M0-M2 y
-> M5 del roadmap). Existen el dominio puro, la persistencia de la timeline, el
-> motor del partido, el módulo de cámara desacoplado y la pantalla P8 (campo,
-> banquillo, reloj, drag & drop, deshacer, resumen) montada en `App.tsx` con un
-> equipo ficticio en memoria. Faltan plantilla, convocatoria, creación de partido
-> y la persistencia SQLite enchufada a la pantalla (M3, M4 y recuperación).
+> Estado: **plantilla real con persistencia en el dispositivo y partido con esa
+> plantilla** (hitos M0-M3 y M5 del roadmap). Existen el dominio puro, la
+> persistencia de la timeline, el motor del partido, el módulo de cámara
+> desacoplado, el equipo y la plantilla (P2-P4) guardados en SQLite (en web, en
+> memoria con copia en `localStorage`), un primer arranque mínimo (nombre del
+> equipo o siembra desde un paquete de equipo) y una navegación provisional por
+> pestañas (Partidos · Plantilla · Equipo) propia, sin Expo Router todavía
+> (ver [doc 5](docs/05-navegacion-pantallas.md) §5.1). JUGAR PARTIDO abre la
+> pantalla P8 con los primeros de la plantilla en el dibujo del equipo; ese
+> partido vive **en memoria** mientras dura la pantalla. Faltan crear el
+> partido (rival, fecha, convocatoria y alineación, M4), la recuperación de un
+> partido en curso al arrancar (P0) y el resumen guardado (M6).
 
 ## Comandos
 
@@ -25,7 +31,7 @@ npm test                  # solo tests (Jest)
 npm run test:props        # propiedades con 2 000 ejecuciones cada una (10 000 partidos)
 npm run typecheck
 npm run check:boundaries  # core / camera / events / db no se mezclan
-npx expo start            # app (de momento, pantalla de bienvenida)
+npx expo start            # app (pestañas Partidos · Plantilla · Equipo y partido en vivo)
 ```
 
 ## Documentación

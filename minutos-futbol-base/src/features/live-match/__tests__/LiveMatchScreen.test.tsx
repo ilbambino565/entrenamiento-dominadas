@@ -12,12 +12,12 @@ import { LiveMatchScreen } from '../LiveMatchScreen';
  */
 jest.useFakeTimers();
 
-async function renderScreen(): Promise<RenderResult> {
+async function renderScreen(onExit?: () => void): Promise<RenderResult> {
   const { session, players } = createDemoSession();
   const screen = await render(
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <LiveMatchScreen session={session} players={players} />
+        <LiveMatchScreen session={session} players={players} onExit={onExit} />
       </SafeAreaProvider>
     </GestureHandlerRootView>,
   );
@@ -37,6 +37,8 @@ const advance = async (ms: number) => {
     jest.advanceTimersByTime(ms);
   });
 };
+
+const flat = (style: unknown) => StyleSheet.flatten(style as StyleProp<ViewStyle>);
 
 describe('LiveMatchScreen', () => {
   it('renderiza 7 fichas en el campo y 3 en el banquillo, reloj a 00:00 y botón INICIAR', async () => {
@@ -191,5 +193,62 @@ describe('LiveMatchScreen', () => {
       expect(screen.getByTestId(zone).props.accessibilityRole).toBe('button');
       expect(screen.getByTestId(zone).props.accessibilityHint).toMatch(/seleccionado/);
     }
+  });
+
+  it('sin onExit no hay salida: ni SALIR en el menú ⋯ ni VOLVER AL INICIO en el resumen', async () => {
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    expect(screen.queryByTestId('exit-button')).toBeNull();
+    expect(screen.getByTestId('formations')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('menu-button'));
+
+    await fireEvent.press(screen.getByTestId('main-button'));
+    await advance(5_000);
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    await fireEvent(screen.getByTestId('end-button'), 'longPress');
+    expect(screen.getByTestId('summary')).toBeTruthy();
+    expect(screen.queryByTestId('exit-match')).toBeNull();
+    await fireEvent.press(screen.getByTestId('summary-close'));
+    // En FINAL sin salida el menú sigue sin acciones.
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    expect(screen.queryByTestId('exit-button')).toBeNull();
+    expect(screen.getByText('Sin acciones en este estado')).toBeTruthy();
+  });
+
+  it('con onExit: SALIR (mantener pulsado, ≥ 56 dp) solo en READY y FINAL, nunca en marcha ni en pausa; el resumen ofrece VOLVER AL INICIO', async () => {
+    const onExit = jest.fn();
+    const screen = await renderScreen(onExit);
+
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    const exit = screen.getByTestId('exit-button');
+    expect(exit).toHaveTextContent('SALIR');
+    expect(exit.props.accessibilityLabel).toBe('SALIR, mantén pulsado');
+    expect(flat(exit.props.style).minHeight).toBeGreaterThanOrEqual(56);
+    // Un toque corto solo enseña la pista: salir sin querer no puede pasar.
+    await fireEvent.press(exit);
+    expect(onExit).not.toHaveBeenCalled();
+    expect(screen.getByTestId('hold-hint')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('menu-button'));
+
+    await fireEvent.press(screen.getByTestId('main-button')); // INICIAR → en marcha
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    expect(screen.queryByTestId('exit-button')).toBeNull();
+    await fireEvent.press(screen.getByTestId('menu-button'));
+
+    await fireEvent.press(screen.getByTestId('main-button')); // PAUSA
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    expect(screen.queryByTestId('exit-button')).toBeNull();
+    await fireEvent(screen.getByTestId('end-button'), 'longPress'); // FINALIZAR → resumen
+
+    const back = screen.getByTestId('exit-match');
+    expect(back).toHaveTextContent('VOLVER AL INICIO');
+    expect(flat(back.props.style).minHeight).toBeGreaterThanOrEqual(56);
+    await fireEvent.press(back);
+    expect(onExit).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByTestId('summary-close'));
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    await fireEvent(screen.getByTestId('exit-button'), 'longPress');
+    expect(onExit).toHaveBeenCalledTimes(2);
   });
 });

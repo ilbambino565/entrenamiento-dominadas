@@ -167,6 +167,31 @@ CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 -- vive en PRAGMA user_version (transaccional con el DDL).
 ```
 
+### Nota: lo que la migración 2 (hito M3) crea de verdad
+
+`src/db/schema.ts` v2 crea solo `team` y `player`, con las columnas de
+`src/core/team.ts` en snake_case. Diferencias respecto al diseño de arriba:
+
+- **Columnas nuevas en `team`:** `default_formation` (dibujo por defecto de los
+  titulares, `'3-1-2'`…; `NULL` = el de referencia del formato),
+  `periods_count` (DEFAULT 2) y `period_duration_ms` (DEFAULT 1 500 000 = 25
+  min). Son los valores que la pantalla Equipo (P4) propone al crear un
+  partido; el partido sigue copiando los suyos y es inmutable.
+- **Todavía sin crear:** `team.crest_uri`, `team.color_primary`,
+  `team.color_secondary` y `player.usual_position`. Llegarán en una migración
+  posterior cuando una pantalla las use (el escudo y los colores de la
+  pantalla de partido vienen hoy del paquete de equipo). Tampoco existen aún
+  `season`, `match`, `match_player` ni las proyecciones.
+- **`player.photo_uri`** admite un **data URI** (JPEG pequeño, recortado y
+  comprimido) además de una URI de archivo local: así la foto viaja con la
+  fila (copia, web con localStorage) y no se pierde si el archivo desaparece.
+- `team.deleted_at` existe por la regla general aunque el MVP no borre
+  equipos: `getTeam` devuelve el primer equipo sin `deleted_at` por
+  `created_at`.
+- Índice: `idx_player_team_order ON player(team_id, sort_order)`, la consulta
+  de la plantilla (`WHERE team_id = ? AND deleted_at IS NULL ORDER BY
+  sort_order, created_at, id`).
+
 ### Fase 2 (definidas, no implementadas)
 
 ```sql

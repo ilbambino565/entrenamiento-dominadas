@@ -22,7 +22,7 @@ describeWithSqlite('migrate contra SQLite real', () => {
     expect(userVersion()).toBe(0);
     await migrate(db);
     expect(userVersion()).toBe(SCHEMA_VERSION);
-    expect(tables()).toEqual(['app_meta', 'match_event']);
+    expect(tables()).toEqual(['app_meta', 'match_event', 'player', 'team']);
   });
 
   it('es idempotente: la segunda vez no abre ninguna transacción', async () => {
@@ -36,12 +36,13 @@ describeWithSqlite('migrate contra SQLite real', () => {
 
   it('solo aplica las migraciones posteriores a la versión actual', async () => {
     const db = createNodeSqliteDouble(native);
-    const extra: Migration[] = [...MIGRATIONS, { version: 2, statements: ['CREATE TABLE extra (id TEXT PRIMARY KEY)'] }];
+    const next = SCHEMA_VERSION + 1;
+    const extra: Migration[] = [...MIGRATIONS, { version: next, statements: ['CREATE TABLE extra (id TEXT PRIMARY KEY)'] }];
     await migrate(db);
     const spy = jest.spyOn(db, 'withExclusiveTransactionAsync');
     await migrate(db, extra);
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(userVersion()).toBe(2);
+    expect(userVersion()).toBe(next);
     expect(tables()).toContain('extra');
   });
 
@@ -49,7 +50,10 @@ describeWithSqlite('migrate contra SQLite real', () => {
     const db = createNodeSqliteDouble(native);
     const broken: Migration[] = [
       ...MIGRATIONS,
-      { version: 2, statements: ['CREATE TABLE extra (id TEXT PRIMARY KEY)', 'CREATE TABLE con error de sintaxis ('] },
+      {
+        version: SCHEMA_VERSION + 1,
+        statements: ['CREATE TABLE extra (id TEXT PRIMARY KEY)', 'CREATE TABLE con error de sintaxis ('],
+      },
     ];
     await expect(migrate(db, broken)).rejects.toThrow();
     expect(userVersion()).toBe(SCHEMA_VERSION);
