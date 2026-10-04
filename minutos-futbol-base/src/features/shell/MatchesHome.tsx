@@ -10,10 +10,8 @@ import { SIZES, useTheme } from '../../ui/theme';
 
 /**
  * P1 "Partidos" mínima (docs/05 §5.3): escudo, nombre del equipo y un botón
- * grande para jugar. Todavía no hay partidos guardados ni convocatoria: el
- * partido sale con la plantilla tal cual (los N primeros activos en el dibujo
- * del equipo) y vive en memoria mientras dura la pantalla. La lista de
- * recientes y "+ Nuevo partido" (P5-P7) llegan en el siguiente paso.
+ * grande para jugar, que abre el asistente de nuevo partido (P5-P7). La lista
+ * de partidos recientes llega en el último paso del hito M4.
  */
 export interface MatchesHomeProps {
   service: SquadService;
@@ -87,8 +85,8 @@ export function MatchesHome({ service, onPlay }: MatchesHomeProps) {
           </Text>
         )}
         <Text style={[styles.note, { color: colors.textMuted }]} testID="play-note">
-          Juegan los {playersOnField} primeros activos de la plantilla, con el portero en su sitio (dibujo {formation}). Crear partidos
-          con rival, fecha y convocatoria llegará más adelante.
+          Se te pedirá el rival, la fecha y la convocatoria. Juegan {playersOnField} en el campo; la alineación propuesta usa el dibujo
+          {formation} y puedes cambiarla antes de iniciar.
         </Text>
       </View>
     </SafeAreaView>

@@ -5,10 +5,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createSquadService, type SquadService } from '../../../app-services/squadService';
 import { GOALKEEPER_SLOT, formationSlots } from '../../../core/formations';
 import type { PlayerDraft } from '../../../core/team';
+import { createInMemoryEventStore } from '../../../db/inMemoryEventStore';
+import { createInMemoryMatchRepository } from '../../../db/inMemoryMatchRepository';
 import { createInMemorySquadRepository } from '../../../db/inMemorySquadRepository';
 import { fieldTokenCenter, fieldTokenMetrics, fitPitch } from '../../live-match/geometry';
 import { AppShell } from '../AppShell';
 import { firstTeamDraft } from '../FirstRunScreen';
+import type { Persistence } from '../persistence';
 
 /**
  * Shell completo con el servicio REAL sobre el repositorio en memoria (sin
@@ -27,16 +30,27 @@ const flat = (style: unknown) => StyleSheet.flatten(style as StyleProp<ViewStyle
 type Instance = ReturnType<RenderResult['getByTestId']>;
 const selected = (el: Instance) => (el.props as { accessibilityState?: { selected?: boolean } }).accessibilityState?.selected;
 
+const persistences = new WeakMap<SquadService, Persistence>();
+
 function makeService(): SquadService {
   let n = 0;
-  return createSquadService({ repo: createInMemorySquadRepository(), now, newId: () => `id-${String(++n).padStart(3, '0')}` });
+  const squad = createInMemorySquadRepository();
+  const service = createSquadService({ repo: squad, now, newId: () => `id-${String(++n).padStart(3, '0')}` });
+  persistences.set(service, { squad, matches: createInMemoryMatchRepository(), events: createInMemoryEventStore() });
+  return service;
 }
+
+const persistenceOf = (service: SquadService): Persistence => {
+  const persistence = persistences.get(service);
+  if (!persistence) throw new Error('Servicio sin persistencia de prueba');
+  return persistence;
+};
 
 async function renderShell(service: SquadService): Promise<RenderResult> {
   return render(
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppShell service={service} now={now} />
+        <AppShell service={service} persistence={persistenceOf(service)} now={now} />
       </SafeAreaProvider>
     </GestureHandlerRootView>,
   );
@@ -86,6 +100,25 @@ function tokenOffset(screen: RenderResult, id: string): { left: number; top: num
     node = node.parent;
   }
   throw new Error(`La ficha ${id} no está colocada en el campo`);
+}
+
+async function waitForStatus(persistence: Persistence, matchId: string, status: string): Promise<void> {
+  for (let i = 0; i < 50; i++) {
+    if ((await persistence.matches.getMatch(matchId))?.status === status) return;
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+  throw new Error(`El partido no llegó a ${status}`);
+}
+
+/** JUGAR PARTIDO → P5 (rival) → P6 (todos) → P7 (alineación por defecto) → INICIAR PARTIDO → P8. */
+async function playThroughWizard(screen: RenderResult, opponent = 'Rival Prueba'): Promise<void> {
+  await fireEvent.press(await screen.findByTestId('play-match'));
+  await fireEvent.changeText(await screen.findByTestId('setup-opponent'), opponent);
+  await fireEvent.press(screen.getByTestId('setup-continue'));
+  await fireEvent.press(await screen.findByTestId('convocation-continue'));
+  await fireEvent.press(await screen.findByTestId('lineup-start'));
 }
 
 const setPack = (pack: unknown) => {
@@ -179,9 +212,9 @@ describe('AppShell — partido con la plantilla real', () => {
     expect(flat(play.props.style).minHeight).toBeGreaterThanOrEqual(64);
     expect(play.props.accessibilityState).toMatchObject({ disabled: false });
     expect(screen.queryByTestId('play-hint')).toBeNull();
-    expect(screen.getByTestId('play-note')).toHaveTextContent(/Juegan los 7 primeros activos de la plantilla, con el portero en su sitio \(dibujo 2-3-1\)\./);
+    expect(screen.getByTestId('play-note')).toHaveTextContent(/Juegan 7 en el campo; la alineación propuesta usa el dibujo\s*2-3-1/);
 
-    await fireEvent.press(play);
+    await playThroughWizard(screen);
     const pitch = await screen.findByTestId('pitch');
     expect(screen.queryByTestId('tab-bar')).toBeNull();
     expect(within(pitch).getAllByTestId(/^token-id-\d+$/)).toHaveLength(7);
@@ -213,6 +246,85 @@ describe('AppShell — partido con la plantilla real', () => {
     expect(screen.getByTestId('play-hint')).toHaveTextContent('Añade jugadores en Plantilla');
     await fireEvent.press(play);
     expect(screen.queryByTestId('pitch')).toBeNull();
+    expect(screen.queryByTestId('setup-opponent')).toBeNull();
+  });
+});
+
+describe('AppShell — crear partido (P5-P7) y persistencia', () => {
+  it('el asistente guarda el partido con rival, convocatoria y alineación, y el progreso sigue al reloj', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo', 'Iris'], 'Ana');
+    const persistence = persistenceOf(service);
+    const screen = await renderShell(service);
+
+    await fireEvent.press(await screen.findByTestId('play-match'));
+    expect(screen.getByTestId('setup-step')).toHaveTextContent('1 / 3');
+    expect(screen.queryByTestId('tab-bar')).toBeNull();
+    await fireEvent.changeText(screen.getByTestId('setup-opponent'), 'CD Rival');
+    await fireEvent.press(screen.getByTestId('setup-continue'));
+
+    expect(await screen.findByTestId('convocation-step')).toHaveTextContent('2 / 3');
+    await fireEvent.press(screen.getByTestId(`convocation-row-${idOf(service, 'Iris')}`));
+    await fireEvent.press(screen.getByTestId('convocation-continue'));
+
+    expect(await screen.findByTestId('lineup-step')).toHaveTextContent('3 / 3');
+    expect(await screen.findByTestId('pitch')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('lineup-start'));
+    await screen.findByTestId('main-button');
+
+    const [match] = await persistence.matches.listRecentMatches();
+    expect(match).toMatchObject({ opponent: 'CD Rival', format: 'F7', playersOnField: 7, periodsCount: 2, periodDurationMs: 25 * MINUTE });
+    const convocated = await persistence.matches.listMatchPlayers(match!.id);
+    expect(convocated.map((c) => c.playerId)).toEqual(['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo'].map((n) => idOf(service, n)));
+    expect(convocated.filter((c) => c.inInitialLineup)).toHaveLength(7);
+    expect(convocated.find((c) => c.playerId === idOf(service, 'Hugo'))).toMatchObject({ inInitialLineup: false, benchOrder: 1 });
+    expect(convocated.find((c) => c.playerId === idOf(service, 'Ana'))).toMatchObject({ isGoalkeeper: true, shirtNumber: 1 });
+
+    // La alineación pasa a READY y, al iniciar, RUNNING con su marca de inicio.
+    await waitForStatus(persistence, match!.id, 'READY');
+    await fireEvent.press(screen.getByTestId('main-button'));
+    await waitForStatus(persistence, match!.id, 'RUNNING');
+    expect(await persistence.matches.getMatch(match!.id)).toMatchObject({ currentPeriod: 1, startedAt: T0 });
+    expect((await persistence.events.loadEvents(match!.id)).length).toBeGreaterThan(0);
+  });
+
+  it('← desde cada paso vuelve al anterior y desde P5 a Partidos, sin crear nada', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const persistence = persistenceOf(service);
+    const screen = await renderShell(service);
+
+    await fireEvent.press(await screen.findByTestId('play-match'));
+    await fireEvent.changeText(screen.getByTestId('setup-opponent'), 'CD Rival');
+    await fireEvent.press(screen.getByTestId('setup-continue'));
+    await fireEvent.press(await screen.findByTestId('convocation-continue'));
+    await fireEvent.press(await screen.findByTestId('lineup-back'));
+    expect(await screen.findByTestId('convocation-step')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('convocation-back'));
+    expect(await screen.findByTestId('setup-opponent')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('setup-back'));
+    expect(await screen.findByTestId('play-match')).toBeTruthy();
+    expect(await persistence.matches.listRecentMatches()).toEqual([]);
+  });
+
+  it('si no se puede guardar el partido, P7 sigue abierta con el aviso y permite reintentar', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const persistence = persistenceOf(service);
+    const createMatch = jest.spyOn(persistence.matches, 'createMatch').mockRejectedValueOnce(new Error('disco lleno'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const screen = await renderShell(service);
+
+    await playThroughWizard(screen);
+    expect(await screen.findByTestId('lineup-start-error')).toHaveTextContent(/No se pudo guardar el partido/);
+    expect(screen.queryByTestId('main-button')).toBeNull();
+    expect(await persistence.matches.listRecentMatches()).toEqual([]);
+
+    await fireEvent.press(screen.getByTestId('lineup-start'));
+    expect(await screen.findByTestId('main-button')).toBeTruthy();
+    expect(createMatch).toHaveBeenCalledTimes(2);
+    expect(await persistence.matches.listRecentMatches()).toHaveLength(1);
+    warn.mockRestore();
   });
 });
 
@@ -241,9 +353,9 @@ describe('AppShell — siembra con paquete de equipo', () => {
     expect(screen.queryByTestId('first-run-name')).toBeNull();
     expect(service.getState().players.map((p) => p.firstName)).toEqual(['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo', 'Iris']);
     expect(service.getState().team?.defaultFormation).toBe('3-1-2');
-    expect(screen.getByTestId('play-note')).toHaveTextContent(/dibujo 3-1-2\)/);
+    expect(screen.getByTestId('play-note')).toHaveTextContent(/dibujo\s*3-1-2/);
 
-    await fireEvent.press(screen.getByTestId('play-match'));
+    await playThroughWizard(screen);
     const pitch = await screen.findByTestId('pitch');
     expect(within(pitch).getAllByTestId(/^token-id-\d+$/)).toHaveLength(7);
     expect(within(screen.getByTestId('bench')).getAllByTestId(/^token-id-\d+$/)).toHaveLength(2);
@@ -312,7 +424,7 @@ describe('AppShell — edición desde la lista y segundo partido', () => {
     const service = makeService();
     await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
     const screen = await renderShell(service);
-    await fireEvent.press(await screen.findByTestId('play-match'));
+    await playThroughWizard(screen);
     await screen.findByTestId('pitch');
     await fireEvent.press(screen.getByTestId('menu-button'));
     await fireEvent(screen.getByTestId('exit-button'), 'longPress');
@@ -320,10 +432,11 @@ describe('AppShell — edición desde la lista y segundo partido', () => {
     await act(async () => {
       await service.addPlayer(draft('Dani', { shirtNumber: 4 }));
     });
-    await fireEvent.press(screen.getByTestId('play-match'));
+    await playThroughWizard(screen, 'Otro Rival');
     const pitch = await screen.findByTestId('pitch');
     expect(within(pitch).getByTestId(`token-${idOf(service, 'Dani')}`)).toBeTruthy();
     expect(screen.getByTestId('main-button')).toHaveTextContent('INICIAR');
-    expect(screen.getByTestId('team-line')).toHaveTextContent(/^CD Prueba$/);
+    expect(screen.getByTestId('team-line')).toHaveTextContent(/CD Prueba/);
+    expect(screen.getByTestId('team-line')).toHaveTextContent(/Otro Rival/);
   });
 });

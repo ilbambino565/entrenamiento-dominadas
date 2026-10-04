@@ -25,12 +25,10 @@ el historial. Actualízala al cerrar cada hito.
   deshacer, dibujos, resumen P9 básico).
 - `src/features/match-setup`: P5 Datos del partido (`MatchSetupScreen`; dominio
   en `core/matchSetup.ts`) P6 Convocatoria (`ConvocationScreen`; dominio en
-  `core/convocation.ts`) y P7 Alineación (`LineupScreen`), todavía sin enlazar
-  en el shell.
+  `core/convocation.ts`) y P7 Alineación (`LineupScreen`), enlazadas en el shell.
 - `src/features/squad`: P2 Plantilla, P3 Jugador, P4 Equipo.
 - `src/features/shell`: pestañas Partidos/Plantilla/Equipo, primer arranque,
-  siembra desde el paquete, JUGAR PARTIDO con la plantilla real (partido en
-  memoria: no se guarda todavía).
+  siembra desde el paquete, JUGAR PARTIDO → asistente P5-P7 → partido guardado.
 - Verificación: `npm run verify` (tsc + fronteras + jest). Exportación web:
   `npx expo export --platform web --output-dir dist-web`.
 
@@ -50,11 +48,14 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
    `Pitch`/`Bench` con un motor propio en memoria (el borrador no se guarda) y
    entrega titulares y banquillo con INICIAR PARTIDO; P8 los recibe por sus
    props `lineup`/`bench` y arranca en READY.
-5. **Partido persistente** (5a hecho: `openPersistence(.web)` abre plantilla,
-   partidos y timeline juntos —SQLite en nativo, memoria en web— y `App.tsx` los
-   guarda; falta 5b, el enlace de P5-P8 en el shell): `createMatchSession` con `createSqliteEventStore`
-   y el `matchId` del repositorio; al FINALIZAR, guardar el resumen (estado
-   y minutos) en `match`.
+5. ✅ **Partido persistente**: `openPersistence(.web)` abre plantilla, partidos
+   y timeline juntos (SQLite en nativo; en web, plantilla con `localStorage` y
+   partidos y timeline solo en memoria). JUGAR PARTIDO abre P5→P6→P7;
+   INICIAR PARTIDO crea `match` + `match_player` y la sesión con el
+   `EventStore` persistente y el `matchId` del repositorio
+   (`shell/startMatch.ts`). `trackMatchProgress` mantiene `status`,
+   `currentPeriod`, `startedAt` y `finishedAt` al día con el motor, también al
+   FINALIZAR; los minutos no se copian a `match` (se regeneran de la timeline).
 6. **P0 "Hay un partido en curso"**: al arrancar, si hay un `match` sin
    finalizar, diálogo CONTINUAR → P8 regenerado desde la timeline.
 7. **P1 Partidos**: lista de recientes con acceso al resumen.

@@ -71,7 +71,7 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         {boot.status === 'ready' ? (
-          <AppShell service={boot.service} />
+          <AppShell service={boot.service} persistence={boot.persistence} />
         ) : (
           <BootScreen error={boot.status === 'error' ? boot.message : null} onRetry={retry} />
         )}

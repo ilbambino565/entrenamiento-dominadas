@@ -1,38 +1,56 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import type { SquadService } from '../../app-services/squadService';
+import type { LineupEntry } from '../../core';
+import type { MatchSetupDraft } from '../../core/matchSetup';
+import { teamMatchConfig } from '../../core/squad';
 import { readTeamPack } from '../../core/teamPack';
 import { useSquadState } from '../../state';
 import { useTheme } from '../../ui/theme';
 import { LiveMatchScreen } from '../live-match';
+import { ConvocationScreen, LineupScreen, MatchSetupScreen } from '../match-setup';
 import { PlayerFormScreen, SquadScreen, TeamScreen } from '../squad';
 import type { PlayerFormResult } from '../squad/PlayerFormScreen';
 import { BootScreen } from './BootScreen';
 import { FirstRunScreen } from './FirstRunScreen';
 import { MatchesHome } from './MatchesHome';
-import { startMatch, type ActiveMatch } from './startMatch';
+import type { Persistence } from './persistence';
+import { endMatch, startMatch, type ActiveMatch } from './startMatch';
 import { TabBar, type Tab } from './TabBar';
 
 /**
  * Navegación provisional de la app (docs/05 §5.1, nota): un shell con estado
  * en React, sin Expo Router todavía. Tres pestañas abajo (Partidos, Plantilla,
- * Equipo) y dos rutas "modales" a pantalla completa sin pestañas: la ficha de
- * jugador y el partido en vivo. Expo Router llegará cuando haya varios
+ * Equipo) y rutas "modales" a pantalla completa sin pestañas: la ficha de
+ * jugador, el asistente de nuevo partido (P5 datos → P6 convocatoria → P7
+ * alineación) y el partido en vivo. Expo Router llegará cuando haya varios
  * partidos y enlaces profundos; las pantallas ya reciben todo por props y no
  * cambiarán.
  *
  * Arranque: carga el equipo; si no hay y existe un paquete de equipo
  * (`globalThis.__TEAM_PACK__`, core/teamPack.ts) lo importa como siembra; si
- * sigue sin haber equipo, el primer arranque pide el nombre. La sesión de
- * partido se crea una vez al pulsar JUGAR PARTIDO y se libera al salir.
+ * sigue sin haber equipo, el primer arranque pide el nombre. JUGAR PARTIDO
+ * abre el asistente; INICIAR PARTIDO (P7) crea la fila del partido y su
+ * convocatoria, abre la sesión sobre la timeline persistente y la libera al salir.
  */
 export interface AppShellProps {
   service: SquadService;
+  /** Partidos y timeline (la plantilla llega ya dentro de `service`). */
+  persistence: Persistence;
   /** Reloj del partido (inyectable en tests); por defecto `Date.now`. */
   now?: () => number;
 }
 
-type Route = { kind: 'tabs' } | { kind: 'player'; playerId: string | null } | { kind: 'match'; match: ActiveMatch };
+type NewMatchStep =
+  | { step: 'data' }
+  | { step: 'squad'; draft: MatchSetupDraft }
+  | { step: 'lineup'; draft: MatchSetupDraft; convocated: string[] };
+
+type Route =
+  | { kind: 'tabs' }
+  | { kind: 'player'; playerId: string | null }
+  | ({ kind: 'new' } & NewMatchStep)
+  | { kind: 'match'; match: ActiveMatch };
 
 const TABS_ROUTE: Route = { kind: 'tabs' };
 
@@ -62,7 +80,7 @@ export async function bootSquad(service: SquadService): Promise<void> {
   }
 }
 
-export function AppShell({ service, now = Date.now }: AppShellProps) {
+export function AppShell({ service, persistence, now = Date.now }: AppShellProps) {
   const { colors } = useTheme();
   const state = useSquadState(service);
   const [booted, setBooted] = useState(false);
@@ -70,6 +88,8 @@ export function AppShell({ service, now = Date.now }: AppShellProps) {
   const [tab, setTab] = useState<Tab>('matches');
   const [route, setRoute] = useState<Route>(TABS_ROUTE);
   const [scrollToEndKey, setScrollToEndKey] = useState(0);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   // Botón/gesto atrás de Android: cierra la ficha, vuelve a Partidos y nunca
   // saca de un partido (se sale con SALIR, mantener pulsado). En iOS y web no hace nada.
@@ -80,6 +100,11 @@ export function AppShell({ service, now = Date.now }: AppShellProps) {
         return true;
       }
       if (route.kind === 'match') return true;
+      if (route.kind === 'new') {
+        setStartError(null);
+        setRoute(route.step === 'lineup' ? { kind: 'new', step: 'squad', draft: route.draft } : route.step === 'squad' ? { kind: 'new', step: 'data' } : TABS_ROUTE);
+        return true;
+      }
       if (tab !== 'matches') {
         setTab('matches');
         return true;
@@ -112,15 +137,31 @@ export function AppShell({ service, now = Date.now }: AppShellProps) {
   }, []);
 
   const play = useCallback(() => {
-    try {
-      setRoute({ kind: 'match', match: startMatch(service.matchSetup(), now) });
-    } catch (error) {
-      console.warn('[AppShell] no se pudo preparar el partido', error);
-    }
-  }, [service, now]);
+    setStartError(null);
+    setRoute({ kind: 'new', step: 'data' });
+  }, []);
+
+  const begin = useCallback(
+    async (draft: MatchSetupDraft, convocated: string[], lineup: LineupEntry[], bench: string[]) => {
+      const team = service.getState().team;
+      if (!team || starting) return;
+      setStarting(true);
+      setStartError(null);
+      try {
+        const match = await startMatch({ persistence, team, draft, players: service.getState().players, convocated, lineup, bench, now });
+        setRoute({ kind: 'match', match });
+      } catch (error) {
+        console.warn('[AppShell] no se pudo crear el partido', error);
+        setStartError('No se pudo guardar el partido. Inténtalo de nuevo.');
+      } finally {
+        setStarting(false);
+      }
+    },
+    [service, persistence, now, starting],
+  );
 
   const leaveMatch = useCallback((match: ActiveMatch) => {
-    match.session.dispose().catch((error: unknown) => console.warn('[AppShell] no se pudo liberar la sesión', error));
+    void endMatch(match);
     setRoute(TABS_ROUTE);
     setTab('matches');
   }, []);
@@ -129,16 +170,49 @@ export function AppShell({ service, now = Date.now }: AppShellProps) {
   if (state.status === 'error') return <BootScreen error={state.error ?? 'No se pudo cargar el equipo y la plantilla'} onRetry={retry} />;
   if (state.team === null) return <FirstRunScreen service={service} onCreated={openSquadTab} />;
 
+  if (route.kind === 'new') {
+    const { team, players } = state;
+    if (route.step === 'data') {
+      return <MatchSetupScreen team={team} now={now()} onCancel={() => setRoute(TABS_ROUTE)} onContinue={(draft) => setRoute({ kind: 'new', step: 'squad', draft })} />;
+    }
+    const { playersOnField } = teamMatchConfig(team);
+    if (route.step === 'squad') {
+      return (
+        <ConvocationScreen
+          players={players}
+          displayNameMode={team.displayNameMode}
+          playersOnField={playersOnField}
+          onBack={() => setRoute({ kind: 'new', step: 'data' })}
+          onContinue={(convocated) => setRoute({ kind: 'new', step: 'lineup', draft: route.draft, convocated })}
+        />
+      );
+    }
+    return (
+      <LineupScreen
+        team={team}
+        players={players}
+        convocated={route.convocated}
+        playersOnField={playersOnField}
+        error={startError}
+        busy={starting}
+        onBack={() => {
+          setStartError(null);
+          setRoute({ kind: 'new', step: 'squad', draft: route.draft });
+        }}
+        onStart={(lineup, bench) => void begin(route.draft, route.convocated, lineup, bench)}
+      />
+    );
+  }
   if (route.kind === 'match') {
     const { match } = route;
     return (
       <LiveMatchScreen
         session={match.session}
-        players={match.setup.players}
-        teamName={match.setup.teamName}
-        rival=""
-        lineup={match.setup.lineup}
-        bench={match.setup.bench}
+        players={match.players}
+        teamName={match.teamName}
+        rival={match.rival}
+        lineup={match.lineup}
+        bench={match.bench}
         onExit={() => leaveMatch(match)}
       />
     );

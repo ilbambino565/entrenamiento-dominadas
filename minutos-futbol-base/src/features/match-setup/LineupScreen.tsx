@@ -33,10 +33,14 @@ export interface LineupScreenProps {
   convocated: readonly string[];
   playersOnField: number;
   onStart: (lineup: LineupEntry[], bench: string[]) => void;
+  /** Mensaje de un intento fallido de crear el partido. */
+  error?: string | null;
+  /** Creando el partido: INICIAR queda deshabilitado para no crearlo dos veces. */
+  busy?: boolean;
   onBack: () => void;
 }
 
-export function LineupScreen({ team, players, convocated, playersOnField, onStart, onBack }: LineupScreenProps) {
+export function LineupScreen({ team, players, convocated, playersOnField, onStart, error = null, busy = false, onBack }: LineupScreenProps) {
   const { colors } = useTheme();
   const squadPlayers = useMemo(() => {
     const chosen = new Set(convocated);
@@ -149,6 +153,11 @@ export function LineupScreen({ team, players, convocated, playersOnField, onStar
             {blocked ? 'Pon al menos un jugador en el campo' : `Faltan ${missing} para completar el campo de ${playersOnField}`}
           </Text>
         ) : null}
+        {error ? (
+          <Text accessibilityRole="alert" testID="lineup-start-error" style={[styles.issue, { color: colors.danger }]}>
+            {error}
+          </Text>
+        ) : null}
         <BigButton
           label="INICIAR PARTIDO"
           onPress={() => {
@@ -156,7 +165,7 @@ export function LineupScreen({ team, players, convocated, playersOnField, onStar
             onStart(lineup, bench);
           }}
           testID="lineup-start"
-          disabled={blocked}
+          disabled={blocked || busy}
         />
       </View>
       <Toast message={toast.message} />

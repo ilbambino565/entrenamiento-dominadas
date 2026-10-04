@@ -16,11 +16,11 @@ Formato inicial: fútbol 7. Arquitectura preparada para fútbol 8 y fútbol 11.
 > memoria con copia en `localStorage`), un primer arranque mínimo (nombre del
 > equipo o siembra desde un paquete de equipo) y una navegación provisional por
 > pestañas (Partidos · Plantilla · Equipo) propia, sin Expo Router todavía
-> (ver [doc 5](docs/05-navegacion-pantallas.md) §5.1). JUGAR PARTIDO abre la
-> pantalla P8 con los primeros de la plantilla en el dibujo del equipo; ese
-> partido vive **en memoria** mientras dura la pantalla. Faltan crear el
-> partido (rival, fecha, convocatoria y alineación, M4), la recuperación de un
-> partido en curso al arrancar (P0) y el resumen guardado (M6).
+> (ver [doc 5](docs/05-navegacion-pantallas.md) §5.1). JUGAR PARTIDO abre el
+> asistente (rival y fecha, convocatoria, alineación) y después la pantalla P8;
+> el partido y su timeline se guardan en SQLite (en web, solo en memoria).
+> Faltan la recuperación de un partido en curso al arrancar (P0), la lista de
+> partidos (P1) y el resumen guardado (M6).
 
 ## Comandos
 
