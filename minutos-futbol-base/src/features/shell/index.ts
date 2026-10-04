@@ -5,4 +5,5 @@ export { FirstRunScreen, firstTeamDraft, type FirstRunScreenProps } from './Firs
 export { MatchesHome, PLAY_BUTTON_HEIGHT, plannedFormation, type MatchesHomeProps } from './MatchesHome';
 export { startMatch, type ActiveMatch } from './startMatch';
 export { TabBar, TABS, TAB_HEIGHT, type Tab, type TabBarProps, type TabItem } from './TabBar';
-export { openSquadRepository } from './openSquadRepository';
+export { openPersistence } from './openPersistence';
+export type { Persistence } from './persistence';

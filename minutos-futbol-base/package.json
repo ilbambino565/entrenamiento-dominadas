@@ -25,6 +25,8 @@
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.2",
     "fast-check": "^4.10.2",
     "jest": "~29.7.0",
     "jest-expo": "~57.0.5",
@@ -40,7 +42,8 @@
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "verify": "npm run typecheck && npm run check:boundaries && npm test -- --silent",
     "test:props": "PROPERTY_RUNS=2000 jest src/core/__tests__/properties.test.ts",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "lint": "expo lint"
   },
   "private": true
 }

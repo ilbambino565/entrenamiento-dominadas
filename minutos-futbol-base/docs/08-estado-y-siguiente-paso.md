@@ -50,7 +50,9 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
    `Pitch`/`Bench` con un motor propio en memoria (el borrador no se guarda) y
    entrega titulares y banquillo con INICIAR PARTIDO; P8 los recibe por sus
    props `lineup`/`bench` y arranca en READY.
-5. **Partido persistente**: `createMatchSession` con `createSqliteEventStore`
+5. **Partido persistente** (5a hecho: `openPersistence(.web)` abre plantilla,
+   partidos y timeline juntos —SQLite en nativo, memoria en web— y `App.tsx` los
+   guarda; falta 5b, el enlace de P5-P8 en el shell): `createMatchSession` con `createSqliteEventStore`
    y el `matchId` del repositorio; al FINALIZAR, guardar el resumen (estado
    y minutos) en `match`.
 6. **P0 "Hay un partido en curso"**: al arrancar, si hay un `match` sin
