@@ -56,8 +56,16 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
    (`shell/startMatch.ts`). `trackMatchProgress` mantiene `status`,
    `currentPeriod`, `startedAt` y `finishedAt` al día con el motor, también al
    FINALIZAR; los minutos no se copian a `match` (se regeneran de la timeline).
-6. **P0 "Hay un partido en curso"**: al arrancar, si hay un `match` sin
-   finalizar, diálogo CONTINUAR → P8 regenerado desde la timeline.
+6. ✅ **P0 "Hay un partido en curso"**: al arrancar, con el equipo cargado, el
+   shell busca con `MatchRepository.findInProgressMatch()` el partido más
+   reciente en RUNNING, PAUSED o HALFTIME (DRAFT y READY no se ofrecen: no hay
+   nada que recuperar). `findResumable` regenera su estado de la timeline y
+   `ResumeMatchScreen` muestra rival, parte, reloj y estado; CONTINUAR PARTIDO
+   abre P8 con `resumeMatch` (sesión sobre la misma timeline, sin repetir la
+   alineación). Un convocado ya eliminado de la plantilla sale como "Jugador
+   eliminado". No hay (todavía) forma de descartar el partido sin continuarlo:
+   se termina desde P8. En web solo aplica dentro de la misma pestaña (la
+   timeline no se guarda).
 7. **P1 Partidos**: lista de recientes con acceso al resumen.
 
 ## 8.4 Cómo trabajar barato

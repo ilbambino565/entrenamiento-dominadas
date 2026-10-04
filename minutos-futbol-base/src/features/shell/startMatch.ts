@@ -1,5 +1,5 @@
 import { createMatchSession, type MatchSession } from '../../app-services/createMatchSession';
-import { toPlayerInfo, type LineupEntry } from '../../core';
+import { DELETED_PLAYER_NAME, toPlayerInfo, type LineupEntry } from '../../core';
 import type { Match, MatchPlayer } from '../../core/match';
 import type { MatchSetupDraft } from '../../core/matchSetup';
 import { GAME_FORMATS } from '../../core/formats';
@@ -84,23 +84,46 @@ export async function startMatch(input: StartMatchInput): Promise<ActiveMatch> {
   }));
   await persistence.matches.createMatch(match, convocation);
 
+  return openActiveMatch({ persistence, team, match, squadIds: squad.map((p) => p.id), players: squad, lineup, bench, now });
+}
+
+interface OpenActiveMatchInput {
+  persistence: Persistence;
+  team: Team;
+  match: Match;
+  /** Convocados en orden de convocatoria. */
+  squadIds: readonly string[];
+  /** Jugadores de la plantilla que se conocen; un convocado sin ficha (eliminado) sale como "Jugador eliminado". */
+  players: readonly Player[];
+  lineup: readonly LineupEntry[];
+  bench: readonly string[];
+  now: () => number;
+}
+
+/** Sesión sobre la timeline persistente + seguimiento del progreso: lo que comparten crear y recuperar un partido. */
+export function openActiveMatch(input: OpenActiveMatchInput): ActiveMatch {
+  const { persistence, team, match, squadIds, players, lineup, bench, now } = input;
   const session = createMatchSession({
     config: {
-      matchId,
-      playersOnField,
+      matchId: match.id,
+      playersOnField: match.playersOnField,
       periodsCount: match.periodsCount,
       periodDurationMs: match.periodDurationMs,
-      squad: squad.map((p) => p.id),
+      squad: [...squadIds],
     },
     store: persistence.events,
     cameraSettings: null,
     now,
   });
-  const tracker = trackMatchProgress(session.engine, persistence.matches, matchId, match, now);
+  const tracker = trackMatchProgress(session.engine, persistence.matches, match.id, match, now);
 
+  const known = new Map(players.map((p) => [p.id, p]));
   const info: Record<string, PlayerInfo> = {};
-  for (const p of squad) info[p.id] = toPlayerInfo(p, team.displayNameMode);
-  return { matchId, rival: match.opponent, teamName: team.name, session, players: info, lineup, bench, tracker };
+  for (const id of squadIds) {
+    const player = known.get(id);
+    info[id] = player ? toPlayerInfo(player, team.displayNameMode) : { id, name: DELETED_PLAYER_NAME, number: 0 };
+  }
+  return { matchId: match.id, rival: match.opponent, teamName: team.name, session, players: info, lineup, bench, tracker };
 }
 
 /** Deja de seguir el progreso (esperando lo pendiente) y libera la sesión. Nunca rechaza. */

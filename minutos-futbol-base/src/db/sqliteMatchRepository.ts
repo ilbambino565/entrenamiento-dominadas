@@ -54,6 +54,7 @@ const INSERT_MATCH_SQL = insertSql('match', MATCH_COLUMNS);
 const INSERT_MATCH_PLAYER_SQL = insertSql('match_player', MATCH_PLAYER_COLUMNS);
 const SELECT_MATCH_SQL = `SELECT ${MATCH_COLUMNS.join(', ')} FROM match WHERE id = ?`;
 const SELECT_RECENT_SQL = `SELECT ${MATCH_COLUMNS.join(', ')} FROM match WHERE deleted_at IS NULL ORDER BY scheduled_at DESC, created_at DESC, id LIMIT ?`;
+const SELECT_IN_PROGRESS_SQL = `SELECT ${MATCH_COLUMNS.join(', ')} FROM match WHERE deleted_at IS NULL AND status IN ('RUNNING', 'PAUSED', 'HALFTIME') ORDER BY updated_at DESC, created_at DESC, id LIMIT 1`;
 // rowid = orden de inserción = orden de la convocatoria.
 const SELECT_PLAYERS_SQL = `SELECT ${MATCH_PLAYER_COLUMNS.join(', ')} FROM match_player WHERE match_id = ? AND deleted_at IS NULL ORDER BY rowid`;
 const UPDATE_PROGRESS_SQL =
@@ -94,6 +95,12 @@ export function createSqliteMatchRepository(db: SQLiteDatabase): MatchRepository
       guarded('listRecentMatches', async () => {
         const rows = await db.getAllAsync<MatchRow>(SELECT_RECENT_SQL, [limit]);
         return rows.map(rowToMatch);
+      }),
+
+    findInProgressMatch: () =>
+      guarded('findInProgressMatch', async () => {
+        const row = await db.getFirstAsync<MatchRow>(SELECT_IN_PROGRESS_SQL);
+        return row ? rowToMatch(row) : null;
       }),
 
     listMatchPlayers: (matchId) =>

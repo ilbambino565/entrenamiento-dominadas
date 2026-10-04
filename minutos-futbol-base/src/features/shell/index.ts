@@ -3,6 +3,8 @@ export { AppShell, bootSquad, type AppShellProps } from './AppShell';
 export { BootScreen, type BootScreenProps } from './BootScreen';
 export { FirstRunScreen, firstTeamDraft, type FirstRunScreenProps } from './FirstRunScreen';
 export { MatchesHome, PLAY_BUTTON_HEIGHT, plannedFormation, type MatchesHomeProps } from './MatchesHome';
+export { ResumeMatchScreen, type ResumeMatchScreenProps } from './ResumeMatchScreen';
+export { findResumable, resumeMatch, type ResumableMatch } from './resumeMatch';
 export { startMatch, endMatch, type ActiveMatch, type StartMatchInput } from './startMatch';
 export { trackMatchProgress, progressOf, type MatchProgressTracker } from './trackMatchProgress';
 export { TabBar, TABS, TAB_HEIGHT, type Tab, type TabBarProps, type TabItem } from './TabBar';

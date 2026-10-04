@@ -15,6 +15,8 @@ import { BootScreen } from './BootScreen';
 import { FirstRunScreen } from './FirstRunScreen';
 import { MatchesHome } from './MatchesHome';
 import type { Persistence } from './persistence';
+import { ResumeMatchScreen } from './ResumeMatchScreen';
+import { findResumable, resumeMatch, type ResumableMatch } from './resumeMatch';
 import { endMatch, startMatch, type ActiveMatch } from './startMatch';
 import { TabBar, type Tab } from './TabBar';
 
@@ -31,7 +33,8 @@ import { TabBar, type Tab } from './TabBar';
  * (`globalThis.__TEAM_PACK__`, core/teamPack.ts) lo importa como siembra; si
  * sigue sin haber equipo, el primer arranque pide el nombre. JUGAR PARTIDO
  * abre el asistente; INICIAR PARTIDO (P7) crea la fila del partido y su
- * convocatoria, abre la sesión sobre la timeline persistente y la libera al salir.
+ * convocatoria, abre la sesión sobre la timeline persistente y la libera al
+ * salir. Al arrancar, si quedó un partido en juego (P0), ofrece continuarlo.
  */
 export interface AppShellProps {
   service: SquadService;
@@ -88,6 +91,8 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   const [tab, setTab] = useState<Tab>('matches');
   const [route, setRoute] = useState<Route>(TABS_ROUTE);
   const [scrollToEndKey, setScrollToEndKey] = useState(0);
+  // P0: `undefined` = aún sin comprobar; `null` = nada que recuperar.
+  const [resumable, setResumable] = useState<ResumableMatch | null | undefined>(undefined);
   const [startError, setStartError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
@@ -123,6 +128,34 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
       alive = false;
     };
   }, [service, attempt]);
+
+  // Con el equipo cargado se busca, una sola vez por arranque, un partido en juego que recuperar.
+  const hasTeam = state.team !== null;
+  useEffect(() => {
+    if (!booted || !hasTeam || resumable !== undefined) return;
+    let alive = true;
+    findResumable(persistence, now())
+      .catch((error: unknown) => {
+        console.warn('[AppShell] no se pudo comprobar si hay un partido en curso', error);
+        return null;
+      })
+      .then((found) => {
+        if (alive) setResumable(found);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [booted, hasTeam, resumable, persistence, now]);
+
+  const continueResumed = useCallback(
+    (found: ResumableMatch) => {
+      const team = service.getState().team;
+      if (!team) return;
+      setResumable(null);
+      setRoute({ kind: 'match', match: resumeMatch({ persistence, team, players: service.getState().players, resumable: found, now }) });
+    },
+    [service, persistence, now],
+  );
 
   const retry = useCallback(() => {
     setBooted(false);
@@ -169,6 +202,18 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   if (!booted) return <BootScreen error={null} onRetry={retry} />;
   if (state.status === 'error') return <BootScreen error={state.error ?? 'No se pudo cargar el equipo y la plantilla'} onRetry={retry} />;
   if (state.team === null) return <FirstRunScreen service={service} onCreated={openSquadTab} />;
+  if (resumable === undefined) return <BootScreen error={null} onRetry={retry} />;
+  if (resumable !== null && route.kind === 'tabs') {
+    return (
+      <ResumeMatchScreen
+        rival={resumable.match.opponent}
+        currentPeriod={resumable.state.currentPeriod}
+        status={resumable.state.status}
+        clockMs={resumable.clockMs}
+        onContinue={() => continueResumed(resumable)}
+      />
+    );
+  }
 
   if (route.kind === 'new') {
     const { team, players } = state;

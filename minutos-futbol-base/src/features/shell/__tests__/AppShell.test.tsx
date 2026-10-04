@@ -288,6 +288,52 @@ describe('AppShell — crear partido (P5-P7) y persistencia', () => {
     expect((await persistence.events.loadEvents(match!.id)).length).toBeGreaterThan(0);
   });
 
+  it('P0: tras un cierre forzoso con el partido en marcha ofrece CONTINUAR y reabre P8 desde la timeline', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo'], 'Ana');
+    const persistence = persistenceOf(service);
+    const first = await renderShell(service);
+    await playThroughWizard(first, 'CD Rival');
+    await fireEvent.press(await first.findByTestId('main-button'));
+    const [match] = await persistence.matches.listRecentMatches();
+    await waitForStatus(persistence, match!.id, 'RUNNING');
+    await first.unmount();
+
+    // Pasan 90 s y la app se vuelve a abrir con la misma base.
+    jest.setSystemTime(T0 + 90_000);
+    const second = await renderShell(service);
+    expect(await second.findByTestId('resume-match-line')).toHaveTextContent('vs CD Rival · 1ª parte');
+    expect(second.getByTestId('resume-clock-line')).toHaveTextContent('Reloj: 01:30 (en marcha)');
+    expect(second.queryByTestId('play-match')).toBeNull();
+    expect(second.queryByTestId('tab-bar')).toBeNull();
+
+    await fireEvent.press(second.getByTestId('resume-continue'));
+    const pitch = await second.findByTestId('pitch');
+    expect(within(pitch).getAllByTestId(/^token-id-\d+$/)).toHaveLength(7);
+    expect(within(second.getByTestId('bench')).getByTestId(`token-${idOf(service, 'Hugo')}`)).toBeTruthy();
+    expect(second.getByTestId('clock')).toHaveTextContent('01:30');
+    expect(second.getByTestId('period')).toHaveTextContent('1ª');
+    expect(second.getByTestId('main-button')).toHaveTextContent('PAUSA');
+    // No se repitió la alineación: la timeline sigue teniendo un solo LINEUP_SET.
+    const types = (await persistence.events.loadEvents(match!.id)).map((e) => e.type);
+    expect(types.filter((t) => t === 'LINEUP_SET')).toHaveLength(1);
+  });
+
+  it('P0: un partido sin empezar (READY) o terminado no se ofrece al arrancar', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const persistence = persistenceOf(service);
+    const first = await renderShell(service);
+    await playThroughWizard(first);
+    const [match] = await persistence.matches.listRecentMatches();
+    await waitForStatus(persistence, match!.id, 'READY');
+    await first.unmount();
+
+    const second = await renderShell(service);
+    expect(await second.findByTestId('play-match')).toBeTruthy();
+    expect(second.queryByTestId('resume-continue')).toBeNull();
+  });
+
   it('← desde cada paso vuelve al anterior y desde P5 a Partidos, sin crear nada', async () => {
     const service = makeService();
     await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');

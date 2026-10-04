@@ -13,6 +13,11 @@ export interface MatchRepository {
   getMatch(id: string): Promise<Match | null>;
   /** Partidos NO eliminados, de la fecha más reciente a la más antigua (después `createdAt` desc e id). */
   listRecentMatches(limit?: number): Promise<Match[]>;
+  /**
+   * El partido en juego más reciente (RUNNING, PAUSED o HALFTIME; por `updatedAt` desc), o `null`.
+   * Un partido sin empezar (DRAFT, READY) no cuenta: no hay nada que recuperar.
+   */
+  findInProgressMatch(): Promise<Match | null>;
   /** Convocados del partido en el orden en que se guardaron. */
   listMatchPlayers(matchId: string): Promise<MatchPlayer[]>;
   /** Actualiza estado, parte y marcas de inicio/fin. Rechaza con NOT_FOUND si el partido no existe. */

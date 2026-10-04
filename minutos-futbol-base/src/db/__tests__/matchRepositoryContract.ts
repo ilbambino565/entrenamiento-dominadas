@@ -130,6 +130,23 @@ export function describeMatchRepositoryContract(
       expect((await repo.listRecentMatches(2)).map((m) => m.id)).toEqual(['match-4', 'match-5']);
     });
 
+    it('findInProgressMatch devuelve el partido en juego más reciente y ignora los sin empezar y los terminados', async () => {
+      expect(await repo.findInProgressMatch()).toBeNull();
+      await repo.createMatch(makeMatch(1, { status: 'DRAFT' }), []);
+      await repo.createMatch(makeMatch(2, { status: 'READY' }), []);
+      await repo.createMatch(makeMatch(3, { status: 'FINISHED', finishedAt: T0 }), []);
+      expect(await repo.findInProgressMatch()).toBeNull();
+
+      await repo.createMatch(makeMatch(4, { status: 'PAUSED', currentPeriod: 1, updatedAt: T0 + 10 }), []);
+      await repo.createMatch(makeMatch(5, { status: 'HALFTIME', currentPeriod: 1, updatedAt: T0 + 20 }), []);
+      expect((await repo.findInProgressMatch())?.id).toBe('match-5');
+
+      await repo.saveProgress('match-5', { status: 'FINISHED', currentPeriod: 2, startedAt: T0, finishedAt: T0 + 30, updatedAt: T0 + 30 });
+      expect((await repo.findInProgressMatch())?.id).toBe('match-4');
+      await repo.saveProgress('match-1', { status: 'RUNNING', currentPeriod: 1, startedAt: T0, finishedAt: null, updatedAt: T0 + 40 });
+      expect((await repo.findInProgressMatch())?.id).toBe('match-1');
+    });
+
     it('un id repetido rechaza con STORAGE y no cambia nada', async () => {
       const original = makeMatch(1);
       const squad = [makeMatchPlayer('match-1', 1)];

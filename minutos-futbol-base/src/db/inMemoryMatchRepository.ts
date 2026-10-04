@@ -10,6 +10,9 @@ import { DEFAULT_RECENT_MATCHES_LIMIT, MatchRepositoryError, type MatchRepositor
  * guardará el partido en curso cuando el paso "partido persistente" lo pida.
  */
 
+/** Estados con el reloj en juego o parado a medias: lo que P0 ofrece continuar. */
+export const IN_PROGRESS: readonly Match['status'][] = ['RUNNING', 'PAUSED', 'HALFTIME'];
+
 const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** El mismo orden que `ORDER BY scheduled_at DESC, created_at DESC, id`. */
@@ -62,6 +65,13 @@ export function createInMemoryMatchRepository(): MatchRepository {
         .sort(byRecent)
         .slice(0, limit)
         .map((match) => ({ ...match }));
+    },
+
+    async findInProgressMatch() {
+      const inProgress = [...matches.values()]
+        .filter((m) => IN_PROGRESS.includes(m.status))
+        .sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt || compareText(a.id, b.id));
+      return inProgress[0] ? { ...inProgress[0] } : null;
     },
 
     async listMatchPlayers(matchId) {
