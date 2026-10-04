@@ -14,12 +14,13 @@ import { GOALKEEPER_SLOT, formationSlots, isValidFormation, parseFormation } fro
 export interface TeamPack {
   teamName: string;
   players: PlayerInfo[];
-  /** Titulares en orden (el portero puede ir en cualquier posición). Por defecto los primeros. */
+  /** Titulares en orden, sin repetidos (el portero puede ir en cualquier posición). Por defecto los primeros. */
   starters?: string[];
   /**
    * Dibujo de los titulares de campo ('3-1-2'…): los titulares se reparten por
    * filas de la defensa al ataque y, en cada fila, de izquierda a derecha
-   * mirando hacia la portería rival. Si no cuadra con el formato, 2-3-1.
+   * mirando hacia la portería rival. Si no cuadra con el formato se usa el de
+   * referencia (2-3-1 en F7, 3-3-1 en F8, 4-4-2 en F11).
    */
   formation?: string;
 }
@@ -47,7 +48,11 @@ export function parseTeamPack(source: unknown): TeamPack | null {
     players,
   };
   if (Array.isArray(source.starters)) {
-    pack.starters = source.starters.filter((id): id is string => typeof id === 'string' && ids.has(id));
+    // Un id repetido (errata en un archivo escrito a mano) tiraría la alineación
+    // entera en el motor: se conserva la primera aparición.
+    pack.starters = source.starters
+      .filter((id): id is string => typeof id === 'string' && ids.has(id))
+      .filter((id, i, all) => all.indexOf(id) === i);
   }
   if (typeof source.formation === 'string' && parseFormation(source.formation)) pack.formation = source.formation;
   return pack;

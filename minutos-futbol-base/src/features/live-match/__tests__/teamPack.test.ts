@@ -37,6 +37,8 @@ describe('paquete de equipo', () => {
     expect(parseTeamPack({ players: [{ id: 'a', name: 'A' }, { id: 'a', name: 'B' }] })).toBeNull();
     expect(parseTeamPack({ players: [{ id: 'a', name: 'A' }] })?.teamName).toBe('Mi equipo');
     expect(parseTeamPack({ players: [{ id: 'a', name: 'A' }], starters: ['zz', 'a'] })?.starters).toEqual(['a']);
+    // Repetidos: se queda la primera aparición (si no, el motor rechaza la alineación entera).
+    expect(parseTeamPack({ ...PACK, starters: ['ana', 'bea', 'bea', 'cris', 'ana'] })?.starters).toEqual(['ana', 'bea', 'cris']);
     expect(readTeamPack()).toBeNull();
   });
 
@@ -84,6 +86,33 @@ describe('paquete de equipo', () => {
     expect(packLineup(eight, 7).lineup.slice(1).map((e) => e.position)).toEqual(formationSlots('2-3-1'));
     const eightStarters = parseTeamPack({ ...PACK, formation: '3-3-1', starters: [...PACK.starters, 'hilda'] })!;
     expect(packLineup(eightStarters, 8).lineup.slice(1).map((e) => e.position)).toEqual(formationSlots('3-3-1'));
+    // Dibujo CORTO ('3-1-1', un dedo que resbala): también se ignora; nadie de campo cae sobre el portero.
+    const short = packLineup(parseTeamPack({ ...PACK, formation: '3-1-1' })!, 7).lineup;
+    expect(short.slice(1).map((e) => e.position)).toEqual(formationSlots('2-3-1'));
+    expect(short.filter((e) => e.position.x === GOALKEEPER_SLOT.x && e.position.y === GOALKEEPER_SLOT.y)).toHaveLength(1);
+  });
+
+  it('un paquete con titulares repetidos sigue cargando el partido con los siete en el campo', async () => {
+    const pack = parseTeamPack({ ...PACK, formation: '3-1-2', starters: ['ana', 'bea', 'bea', 'cris', 'dani', 'eva', 'fani', 'gala'] })!;
+    const real = createDemoSession({ pack });
+    await prepareMatch(real.session, real.lineup, real.bench);
+    const state = real.session.engine.getState();
+    expect(state.status).toBe('READY');
+    expect(Object.values(state.players).filter((p) => p.location === 'FIELD').map((p) => p.playerId).sort()).toEqual(
+      ['ana', 'bea', 'cris', 'dani', 'eva', 'fani', 'gala'],
+    );
+  });
+
+  it('el camino real (__TEAM_PACK__ → createDemoSession → prepareMatch) respeta el dibujo y el orden por filas en el motor', async () => {
+    (globalThis as { __TEAM_PACK__?: unknown }).__TEAM_PACK__ = { ...PACK, formation: '3-1-2', starters: ['ana', 'bea', 'cris', 'dani', 'eva', 'fani', 'gala'] };
+    const real = createDemoSession();
+    await prepareMatch(real.session, real.lineup, real.bench);
+    const players = real.session.engine.getState().players;
+    expect(players.ana?.position).toEqual(GOALKEEPER_SLOT);
+    expect(['bea', 'cris', 'dani', 'eva', 'fani', 'gala'].map((id) => players[id]?.position)).toEqual(formationSlots('3-1-2'));
+    // bea: lateral izquierdo (x pequeña, fila de la defensa); gala: delantera derecha.
+    expect(players.bea?.position).toEqual({ x: 0.2, y: 0.7 });
+    expect(players.gala?.position).toEqual({ x: 0.65, y: 0.22 });
   });
 
   it('createDemoSession usa el paquete global si existe y el equipo de prueba si no', async () => {
