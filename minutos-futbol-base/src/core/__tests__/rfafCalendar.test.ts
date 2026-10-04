@@ -168,3 +168,70 @@ C.D. EJEMPLO "A" – UD NORTE Ciudad - Campo (A) 20-09-2030 - 10:00
     expect(parseRfafCalendar(text, OWN).fixtures[0]).toMatchObject({ matchday: 1, matchdayDate: null, opponent: 'UD NORTE' });
   });
 });
+
+/**
+ * "Versión resumida" de la página: una línea por partido, tres celdas con
+ * tabuladores (local, goles con espacios de relleno, visitante), sin hora ni
+ * campo, y rótulos "Primera/Segunda Vuelta" y pie de página entre medias.
+ */
+const SUMMARY = [
+  'Organización\tÁrea Deportiva',
+  'Calendario',
+  '3ª Liga Inventada Benjamín (Provincia), Grupo 9     ',
+  'Temporada 2030-2031',
+  'Primera Vuelta',
+  'Jornada 1 (20-09-2030)',
+  'UD NORTE\t    \tPEÑA IMAGINARIA',
+  'CLUB OTRO "B"\t    1\tC.D. EJEMPLO "A"',
+  'ATLETICO SUR\t2    12\tCLUB FINAL',
+  'Jornada 2 (27-09-2030)',
+  'C.D. EJEMPLO "A"\t    \tUD NORTE',
+  'PEÑA IMAGINARIA\t5    \tCLUB OTRO "B"',
+  'Segunda Vuelta',
+  'Jornada 3 (04-10-2030)',
+  'ATLETICO SUR\t    8\tC.D. EJEMPLO "A"',
+  'CLUB FINAL\t    \tUD NORTE',
+  '',
+  'main-logo',
+  'Real Federación Andaluza de Fútbol ©2030',
+].join('\n');
+
+describe('parseRfafCalendar: versión resumida', () => {
+  it('lee los partidos del equipo con la fecha de la jornada, sin hora ni campo', () => {
+    const calendar = parseRfafCalendar(SUMMARY, OWN);
+    expect(calendar.competition).toBe('3ª Liga Inventada Benjamín (Provincia), Grupo 9');
+    expect(calendar.season).toBe('2030-2031');
+    expect(calendar.fixtures).toEqual([
+      { matchday: 1, matchdayDate: ms(20, 9, 2030), opponent: 'CLUB OTRO "B"', homeAway: 'AWAY', venue: null, scheduledAt: ms(20, 9, 2030), hasTime: false },
+      { matchday: 2, matchdayDate: ms(27, 9, 2030), opponent: 'UD NORTE', homeAway: 'HOME', venue: null, scheduledAt: ms(27, 9, 2030), hasTime: false },
+      { matchday: 3, matchdayDate: ms(4, 10, 2030), opponent: 'ATLETICO SUR', homeAway: 'AWAY', venue: null, scheduledAt: ms(4, 10, 2030), hasTime: false },
+    ]);
+  });
+
+  it('con una cifra de gol en la celda del medio o con el rival escrito igual que el nuestro con otra letra, no se confunde', () => {
+    const text = SUMMARY.replace('CLUB OTRO "B"\t    1\tC.D. EJEMPLO "A"', 'C.D. EJEMPLO "B"\t    1\tCLUB OTRO');
+    expect(parseRfafCalendar(text, OWN).fixtures.map((f) => f.matchday)).toEqual([2, 3]);
+  });
+
+  it('si al copiar los tabuladores se convierten en espacios sigue encontrando el rival sin los goles', () => {
+    const flat = SUMMARY.replace(/\t/g, '  ');
+    expect(parseRfafCalendar(flat, OWN).fixtures.map((f) => [f.matchday, f.homeAway, f.opponent])).toEqual([
+      [1, 'AWAY', 'CLUB OTRO "B"'],
+      [2, 'HOME', 'UD NORTE'],
+      [3, 'AWAY', 'ATLETICO SUR'],
+    ]);
+  });
+
+  it('un calendario completo de 30 jornadas da un partido por jornada, alternando casa y fuera', () => {
+    const lines = ['Calendario', 'Liga X', 'Temporada 2030-2031'];
+    for (let j = 1; j <= 30; j++) {
+      lines.push(`Jornada ${j} (${String(j).padStart(2, '0')}-10-2030)`);
+      lines.push(j % 2 === 1 ? `${OWN}\t    \tRIVAL ${j}` : `RIVAL ${j}\t    \t${OWN}`);
+      lines.push('OTRO UNO\t    \tOTRO DOS');
+    }
+    const { fixtures } = parseRfafCalendar(lines.join('\n'), OWN);
+    expect(fixtures).toHaveLength(30);
+    expect(fixtures.every((f, i) => f.matchday === i + 1 && f.homeAway === (f.matchday % 2 === 1 ? 'HOME' : 'AWAY') && f.opponent === `RIVAL ${f.matchday}`)).toBe(true);
+  });
+});
+

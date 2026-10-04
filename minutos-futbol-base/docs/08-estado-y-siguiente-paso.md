@@ -89,16 +89,20 @@ localStorage (navegación privada) todo vive solo en memoria.
 **Calendario de la RFAF (en curso).** La web de la RFAF prohíbe a los programas
 leerla (`robots.txt`: `Disallow: /` salvo Google), así que no se descarga nada:
 el entrenador pega el texto que copia de la página. Hecho: `core/rfafCalendar.ts`
-(`parseRfafCalendar(texto, nombreDelEquipo)`): lee competición, temporada y,
-por jornada, los partidos del equipo (rival, local/visitante, campo,
-fecha y hora local) anclándose en el nombre del equipo, con nombres partidos en
-varias líneas y el guion perdido al copiar. Los goles se reconocen pero se descartan (la app no los usa). Tests con clubes inventados.
-**Sin validar contra un texto pegado real** (el texto extraído del PDF de
-muestra sale con las columnas desordenadas y no sirve). Pendiente: (1) probar con
-un trozo copiado de la web, (2) campo "nombre en la federación" en el equipo
-(migración 4), (3) botón "Importar calendario" en P5 que rellene rival, fecha,
-local/visitante, competición y jornada. El nombre del equipo real vive solo en
-la app del entrenador, no en el repo.
+(`parseRfafCalendar(texto, nombreDelEquipo)`): lee competición, temporada y, por
+jornada, los partidos del equipo (rival, local/visitante, fecha) en los dos
+formatos de la página. La "versión resumida" (validada con un texto real
+pegado: una línea por partido, celdas con tabuladores, sin hora ni campo)
+da la fecha de la jornada y `hasTime` false; la completa trae fecha, hora y
+campo de cada partido. Los goles se reconocen pero se descartan. Tests con clubes
+inventados. Como la resumida no trae hora, P5 deja editables fecha y hora (ya lo
+son): el calendario solo las rellena con la fecha de la jornada, normalmente un
+domingo, y el entrenador la ajusta. Pendiente: (1) campo "nombre en la
+federación" en el equipo (migración 4), (2) guardar el calendario importado,
+(3) "Importar calendario" (pegar texto) y "Próximos partidos" en Partidos, que al
+tocar uno abre P5 con rival, fecha, local/visitante, competición y jornada
+rellenos. El nombre del equipo real vive solo en la app del entrenador, no en
+el repo.
 
 **Hito M4 completo.** Siguiente (docs/06): M5/M6, ver el roadmap antes de
 empezar. Cosas conocidas pendientes: descartar

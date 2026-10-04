@@ -6,13 +6,17 @@ import type { HomeAway } from './match';
  * web (la web prohíbe a los programas leerla, robots.txt) y devuelve los
  * partidos del equipo indicado. Dominio puro, sin red.
  *
- * Formato de la página, por jornada:
- *   Jornada 3 (04-10-2026)
+ * Dos formatos de la misma página, por jornada ("Jornada 3 (04-10-2026)"):
+ *
+ * - VERSIÓN RESUMIDA (la que se copia mejor): una línea por partido con tres
+ *   celdas separadas por tabuladores, `LOCAL ⇥ goles ⇥ VISITANTE`. No trae hora
+ *   ni campo: el partido toma la fecha de la jornada (`hasTime` false).
+ * - VERSIÓN COMPLETA:
  *   <LOCAL> <goles> – <goles> <VISITANTE> <Localidad - Campo … (A)> <dd-mm-aaaa> [- hh:mm]
- * con los nombres de club en MAYÚSCULAS y el campo en minúsculas/mixto. Los
- * nombres largos y el campo se parten en varias líneas según el ancho, así que
- * se aplana el texto y se ancla el partido en el nombre del equipo propio: lo
- * que queda a un lado es el rival (y, si va delante, el equipo es visitante).
+ *   con los nombres de club en MAYÚSCULAS y el campo en minúsculas/mixto. Los
+ *   nombres largos y el campo se parten en varias líneas según el ancho, así que
+ *   se aplana el texto y se ancla el partido en el nombre del equipo propio: lo
+ *   que queda a un lado es el rival (y, si va delante, el equipo es visitante).
  * Los goles pueden estar o no ("–" a secas = sin jugar): se descartan, la app
  * no los usa, pero hay que reconocerlos para separar el rival.
  */
@@ -129,40 +133,80 @@ function header(raw: string): { competition: string | null; season: string | nul
 export function parseRfafCalendar(text: string, ownTeam: string): RfafCalendar {
   const { competition, season } = header(text);
   const own = fold(flatten(ownTeam));
-  const flat = flatten(text);
   const fixtures: RfafFixture[] = [];
   if (own === '') return { competition, season, fixtures };
 
-  const headers = [...flat.matchAll(JORNADA)];
+  const headers = [...text.matchAll(JORNADA)];
   headers.forEach((h, index) => {
     const start = (h.index ?? 0) + h[0].length;
-    const end = headers[index + 1]?.index ?? flat.length;
-    const segment = flat.slice(start, end);
+    const end = headers[index + 1]?.index ?? text.length;
+    const segment = text.slice(start, end);
     const matchday = Number(h[1]);
     const matchdayDate = localMs(Number(h[4]), Number(h[3]), Number(h[2]));
 
-    let chunkStart = 0;
-    for (const terminator of segment.matchAll(DATE_TIME)) {
-      const chunk = segment.slice(chunkStart, terminator.index ?? 0).trim();
-      chunkStart = (terminator.index ?? 0) + terminator[0].length;
-      const folded = fold(chunk);
-      const at = findOwn(folded, own);
-      if (at < 0) continue;
-
-      const hasTime = terminator[4] !== undefined;
-      const scheduledAt = localMs(Number(terminator[3]), Number(terminator[2]), Number(terminator[1]), hasTime ? Number(terminator[4]) : 0, hasTime ? Number(terminator[5]) : 0);
-      if (scheduledAt === null) continue;
-
-      const before = chunk.slice(0, at).trim();
-      const after = chunk.slice(at + own.length).trim();
-      const visiting = before.replace(/(?:\d+\s*)?[–—-]?\s*(?:\d+\s*)?$/, '').trim() !== '';
-      if (visiting) {
-        fixtures.push({ matchday, matchdayDate, opponent: splitScoreTail(before).name, homeAway: 'AWAY', venue: after || null, scheduledAt, hasTime });
-      } else {
-        const { opponent, venue } = splitOpponentAndVenue(splitScoreHead(after).rest);
-        fixtures.push({ matchday, matchdayDate, opponent, homeAway: 'HOME', venue, scheduledAt, hasTime });
-      }
+    if (new RegExp(DATE_TIME.source).test(flatten(segment))) {
+      fixtures.push(...parseFullSegment(flatten(segment), own, matchday, matchdayDate));
+    } else if (matchdayDate !== null) {
+      fixtures.push(...parseSummarySegment(segment, own, matchday, matchdayDate));
     }
   });
   return { competition, season, fixtures };
+}
+
+/** Versión completa: cada partido termina en su fecha (y hora). */
+function parseFullSegment(segment: string, own: string, matchday: number, matchdayDate: number | null): RfafFixture[] {
+  const fixtures: RfafFixture[] = [];
+  let chunkStart = 0;
+  for (const terminator of segment.matchAll(DATE_TIME)) {
+    const chunk = segment.slice(chunkStart, terminator.index ?? 0).trim();
+    chunkStart = (terminator.index ?? 0) + terminator[0].length;
+    const folded = fold(chunk);
+    const at = findOwn(folded, own);
+    if (at < 0) continue;
+
+    const hasTime = terminator[4] !== undefined;
+    const scheduledAt = localMs(Number(terminator[3]), Number(terminator[2]), Number(terminator[1]), hasTime ? Number(terminator[4]) : 0, hasTime ? Number(terminator[5]) : 0);
+    if (scheduledAt === null) continue;
+
+    const before = chunk.slice(0, at).trim();
+    const after = chunk.slice(at + own.length).trim();
+    const visiting = before.replace(/(?:\d+\s*)?[–—-]?\s*(?:\d+\s*)?$/, '').trim() !== '';
+    if (visiting) {
+      fixtures.push({ matchday, matchdayDate, opponent: splitScoreTail(before).name, homeAway: 'AWAY', venue: after || null, scheduledAt, hasTime });
+    } else {
+      const { opponent, venue } = splitOpponentAndVenue(splitScoreHead(after).rest);
+      fixtures.push({ matchday, matchdayDate, opponent, homeAway: 'HOME', venue, scheduledAt, hasTime });
+    }
+  }
+  return fixtures;
+}
+
+/**
+ * Versión resumida: una línea por partido, `LOCAL ⇥ goles ⇥ VISITANTE`. Con los
+ * tabuladores intactos se comparan las celdas enteras; si al copiar se
+ * convirtieron en espacios se ancla en el nombre propio y se quitan los goles
+ * pegados al rival (aquí no hay campo ni fecha que confundir, así que una cifra
+ * suelta junto al nombre es un gol).
+ */
+function parseSummarySegment(segment: string, own: string, matchday: number, matchdayDate: number): RfafFixture[] {
+  const fixtures: RfafFixture[] = [];
+  for (const line of segment.split(/\r?\n/)) {
+    const cells = line.split('\t').map((c) => flatten(c));
+    const fixture = (opponent: string, homeAway: HomeAway): RfafFixture => ({ matchday, matchdayDate, opponent, homeAway, venue: null, scheduledAt: matchdayDate, hasTime: false });
+    if (cells.length >= 3) {
+      const home = cells[0] ?? '';
+      const away = cells[cells.length - 1] ?? '';
+      if (fold(home) === own && away !== '') fixtures.push(fixture(away, 'HOME'));
+      else if (fold(away) === own && home !== '') fixtures.push(fixture(home, 'AWAY'));
+      continue;
+    }
+    const flat = flatten(line);
+    const at = findOwn(fold(flat), own);
+    if (at < 0) continue;
+    const before = flat.slice(0, at).trim().replace(/\s+\d+(?:\s+\d+)?$/, '').trim();
+    const after = flat.slice(at + own.length).replace(/^\s*(?:\d+\s+)?(?:\d+\s+)?[–—-]?\s*/, '').trim();
+    if (before !== '') fixtures.push(fixture(before, 'AWAY'));
+    else if (after !== '') fixtures.push(fixture(after, 'HOME'));
+  }
+  return fixtures;
 }
