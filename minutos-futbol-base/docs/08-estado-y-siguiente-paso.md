@@ -23,6 +23,8 @@ el historial. Actualízala al cerrar cada hito.
   cámara desacoplada (dormida).
 - `src/features/live-match`: P8 partido en vivo (campo, banquillo, reloj,
   deshacer, dibujos, resumen P9 básico).
+- `src/features/match-setup`: P5 Datos del partido (`MatchSetupScreen`; dominio
+  en `core/matchSetup.ts`), todavía sin enlazar en el shell.
 - `src/features/squad`: P2 Plantilla, P3 Jugador, P4 Equipo.
 - `src/features/shell`: pestañas Partidos/Plantilla/Equipo, primer arranque,
   siembra desde el paquete, JUGAR PARTIDO con la plantilla real (partido en
@@ -37,7 +39,8 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
 1. ✅ **Tabla `match` y repositorio** (`src/db`): migración 3 con `match` y
    `match_player` (docs/02), `MatchRepository` (crear, listar recientes,
    marcar estado/finalizado) con contrato en memoria + SQLite.
-2. **P5 Datos del partido**: rival, fecha, partes × minutos (por defecto los
+2. ✅ **P5 Datos del partido** (pantalla y dominio hechos; aún sin enlazar en
+   la navegación, se conecta con P6/P7): rival, fecha, partes × minutos (por defecto los
    del equipo). Pantalla sencilla en `src/features/match-setup/`.
 3. **P6 Convocatoria**: lista de activos con todos marcados por defecto.
 4. **P7 Alineación**: reutilizar `Pitch`/`Bench` con el motor en estado DRAFT

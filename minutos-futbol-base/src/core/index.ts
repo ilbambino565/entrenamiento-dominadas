@@ -12,3 +12,4 @@ export * from './formations';
 export * from './squad';
 export * from './teamPack';
 export * from './match';
+export * from './matchSetup';
