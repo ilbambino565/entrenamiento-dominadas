@@ -15,3 +15,4 @@ export * from './match';
 export * from './matchSetup';
 export * from './convocation';
 export * from './rfafCalendar';
+export * from './fixture';

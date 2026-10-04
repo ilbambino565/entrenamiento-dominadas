@@ -198,6 +198,14 @@ CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   la tabla). Es un dato del dispositivo: nunca va al repositorio. Lo usa el
   lector del calendario pegado (`core/rfafCalendar.ts`) para encontrar los
   partidos del equipo.
+- **Migración 5 (`fixture`):** los partidos del equipo en el calendario importado
+  de la federación (rival, jornada, fecha, local/visitante, campo, competición,
+  temporada), con `match_id` opcional que enlaza con el partido jugado y se
+  conserva al reimportar (por jornada). Se sustituyen enteros al reimportar y se
+  borran de verdad (sin `deleted_at`): son una copia de lo que dice la federación.
+  Índice `idx_fixture_team_date (team_id, scheduled_at)`. `FixtureRepository`
+  (`listFixtures`, `replaceFixtures` en una transacción, `linkMatch`) con variante
+  SQLite y en memoria/web (clave `minutos-futbol-base.fixtures.v1`).
 - **`player.photo_uri`** admite un **data URI** (JPEG pequeño, recortado y
   comprimido) además de una URI de archivo local: así la foto viaja con la
   fila (copia, web con localStorage) y no se pierde si el archivo desaparece.

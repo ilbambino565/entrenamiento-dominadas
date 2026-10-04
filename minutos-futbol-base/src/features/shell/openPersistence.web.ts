@@ -1,4 +1,5 @@
 import { createInMemoryEventStore } from '../../db/inMemoryEventStore';
+import { createInMemoryFixtureRepository } from '../../db/inMemoryFixtureRepository';
 import { createInMemoryMatchRepository } from '../../db/inMemoryMatchRepository';
 import { createInMemorySquadRepository } from '../../db/inMemorySquadRepository';
 import type { KeyValueStorage } from '../../db/squadRepository';
@@ -8,8 +9,8 @@ import type { Persistence } from './persistence';
  * Persistencia en WEB: plantilla, partidos y timeline en memoria con copia en
  * `localStorage` si existe (no hay SQLite en web): cada escritura se confirma en
  * el storage antes de mostrarse, y al recargar la página el partido en curso se
- * recupera (P0). La plantilla va en una clave, los partidos en otra y la
- * timeline en una por partido. Misma firma que la variante nativa
+ * recupera (P0). La plantilla va en una clave, los partidos en otra, el
+ * calendario en otra y la timeline en una por partido. Misma firma que la variante nativa
  * (`openPersistence.ts`); Metro la elige para la plataforma web y el paquete
  * web no arrastra `expo-sqlite`. Con el almacenamiento bloqueado (navegación
  * privada, política del navegador) el propio acceso a `localStorage` puede
@@ -31,6 +32,7 @@ export async function openPersistence(): Promise<Persistence> {
   return {
     squad: createInMemorySquadRepository(storage ? { storage } : {}),
     matches: createInMemoryMatchRepository(storage ? { storage } : {}),
+    fixtures: createInMemoryFixtureRepository(storage ? { storage } : {}),
     events: createInMemoryEventStore(storage ? { storage } : {}),
   };
 }

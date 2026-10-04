@@ -1,4 +1,5 @@
 import { createSqliteEventStore } from '../../db/sqliteEventStore';
+import { createSqliteFixtureRepository } from '../../db/sqliteFixtureRepository';
 import { createSqliteMatchRepository } from '../../db/sqliteMatchRepository';
 import { createSqliteSquadRepository } from '../../db/sqliteSquadRepository';
 import type { Persistence } from './persistence';
@@ -18,6 +19,7 @@ export async function openPersistence(): Promise<Persistence> {
   return {
     squad: createSqliteSquadRepository(db),
     matches: createSqliteMatchRepository(db),
+    fixtures: createSqliteFixtureRepository(db),
     events: createSqliteEventStore(db),
   };
 }

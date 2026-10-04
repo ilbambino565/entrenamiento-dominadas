@@ -20,3 +20,7 @@ export * from './matchRepository';
 export * from './matchMappers';
 export * from './inMemoryMatchRepository';
 export * from './sqliteMatchRepository';
+export * from './fixtureRepository';
+export * from './fixtureMappers';
+export * from './inMemoryFixtureRepository';
+export * from './sqliteFixtureRepository';

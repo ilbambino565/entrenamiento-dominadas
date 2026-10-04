@@ -6,6 +6,7 @@ import { createSquadService, type SquadService } from '../../../app-services/squ
 import { GOALKEEPER_SLOT, formationSlots } from '../../../core/formations';
 import type { PlayerDraft } from '../../../core/team';
 import { createInMemoryEventStore } from '../../../db/inMemoryEventStore';
+import { createInMemoryFixtureRepository } from '../../../db/inMemoryFixtureRepository';
 import { createInMemoryMatchRepository } from '../../../db/inMemoryMatchRepository';
 import { createInMemorySquadRepository } from '../../../db/inMemorySquadRepository';
 import { fieldTokenCenter, fieldTokenMetrics, fitPitch } from '../../live-match/geometry';
@@ -37,7 +38,7 @@ function makeService(): SquadService {
   let n = 0;
   const squad = createInMemorySquadRepository();
   const service = createSquadService({ repo: squad, now, newId: () => `id-${String(++n).padStart(3, '0')}` });
-  persistences.set(service, { squad, matches: createInMemoryMatchRepository(), events: createInMemoryEventStore() });
+  persistences.set(service, { squad, matches: createInMemoryMatchRepository(), fixtures: createInMemoryFixtureRepository(), events: createInMemoryEventStore() });
   return service;
 }
 

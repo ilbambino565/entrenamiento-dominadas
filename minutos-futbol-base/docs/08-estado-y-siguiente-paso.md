@@ -99,7 +99,11 @@ inventados. Como la resumida no trae hora, P5 deja editables fecha y hora (ya lo
 son): el calendario solo las rellena con la fecha de la jornada, normalmente un
 domingo, y el entrenador la ajusta. Hecho también: campo "Nombre en la
 federación" en Equipo (P4) y `team.federation_name` (migración 4, `Team.federationName`).
-Pendiente: (1) guardar el calendario importado, (2) "Importar calendario" (pegar texto) y "Próximos partidos" en Partidos, que al
+Hecho también: guardar el calendario (migración 5, tabla `fixture`, `FixtureRepository` en
+SQLite y memoria/web, `core/fixture.ts` con `fixturesFromCalendar`,
+`mergeImportedFixtures` —conserva lo ya jugado al reimportar— y `upcomingFixtures`),
+ya en `Persistence`.
+Pendiente: (1) "Importar calendario" (pegar texto) y "Próximos partidos" en Partidos, que al
 tocar uno abre P5 con rival, fecha, local/visitante, competición y jornada
 rellenos. El nombre del equipo real vive solo en la app del entrenador, no en
 el repo.

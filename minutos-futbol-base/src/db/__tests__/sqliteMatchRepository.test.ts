@@ -1,5 +1,5 @@
 import { migrate } from '../migrate';
-import { DB_PRAGMAS, MIGRATIONS } from '../schema';
+import { DB_PRAGMAS, MIGRATIONS, SCHEMA_VERSION } from '../schema';
 import { createSqliteMatchRepository } from '../sqliteMatchRepository';
 import { createSqliteSquadRepository } from '../sqliteSquadRepository';
 import { createNodeSqliteDouble, describeWithSqlite, openMemoryDatabase, type NodeSqliteDatabase } from './nodeSqlite';
@@ -46,9 +46,9 @@ describeWithSqlite('SqliteMatchRepository', () => {
     await migrate(db, MIGRATIONS.slice(0, 3));
     expect(userVersion()).toBe(3);
     await migrate(db);
-    expect(userVersion()).toBe(4);
+    expect(userVersion()).toBe(SCHEMA_VERSION);
     const tables = (native.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
-    expect(tables).toEqual(['app_meta', 'match', 'match_event', 'match_player', 'player', 'team']);
+    expect(tables).toEqual(['app_meta', 'fixture', 'match', 'match_event', 'match_player', 'player', 'team']);
     const squad = createSqliteSquadRepository(db);
     expect(await squad.getTeam()).toEqual(team);
     expect(await squad.listPlayers(TEAM_ID)).toEqual([player]);

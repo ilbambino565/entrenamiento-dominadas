@@ -71,9 +71,9 @@ describeWithSqlite('schema: DDL contra SQLite real', () => {
     expect(unique).toContainEqual(['match_id', 'seq']);
   });
 
-  it('crea app_meta, team, player, match y match_player, y todavía ninguna proyección', () => {
+  it('crea app_meta, team, player, match, match_player y fixture, y todavía ninguna proyección', () => {
     const tables = names(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all());
-    expect(tables).toEqual(['app_meta', 'match', 'match_event', 'match_player', 'player', 'team']);
+    expect(tables).toEqual(['app_meta', 'fixture', 'match', 'match_event', 'match_player', 'player', 'team']);
     db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?)').run('last_clock_seen', '1700000000000');
     expect(db.prepare('SELECT value FROM app_meta WHERE key = ?').get('last_clock_seen')).toMatchObject({
       value: '1700000000000',

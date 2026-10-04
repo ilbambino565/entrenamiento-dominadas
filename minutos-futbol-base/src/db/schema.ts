@@ -5,13 +5,14 @@
  * - v2 (hito M3): equipo y plantilla (`team`, `player`).
  * - v3 (hito M4): partidos y convocatoria (`match`, `match_player`).
  * - v4: `team.federation_name` (nombre del equipo en el calendario de la federación).
+ * - v5: `fixture` (los partidos del equipo en el calendario importado).
  *
  * Las proyecciones (`clock_segment`, `player_interval`) llegarán como migraciones nuevas.
  * Una migración publicada NUNCA se edita: una base ya migrada no volvería a
  * ejecutarla y quedaría distinta de una base nueva.
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export interface Migration {
   /** Consecutivo desde 1. Se escribe en `PRAGMA user_version` al aplicarla. */
@@ -188,6 +189,35 @@ export const MIGRATIONS: readonly Migration[] = [
       // diferir del nombre que le da el entrenador ("Alevín A" vs "C.D. X "A""),
       // y es un dato del dispositivo: no entra en el repositorio. NULL = sin informar.
       'ALTER TABLE team ADD COLUMN federation_name TEXT',
+    ],
+  },
+  {
+    version: 5,
+    statements: [
+      // Partidos del calendario de la federación (solo los del equipo). Se
+      // sustituyen enteros al reimportar y se borran de verdad: son una copia de
+      // lo que dice la federación, no datos del entrenador, así que no llevan
+      // `deleted_at`. `match_id` enlaza con el partido jugado a partir de uno de
+      // ellos (la reimportación lo conserva por jornada). `scheduled_at` sin hora
+      // en la fuente es las 00:00 y `has_time` 0: el entrenador pone la hora en P5.
+      `CREATE TABLE fixture (
+        id            TEXT PRIMARY KEY,
+        team_id       TEXT NOT NULL REFERENCES team(id),
+        matchday      INTEGER NOT NULL,
+        matchday_date INTEGER,
+        opponent      TEXT NOT NULL,
+        home_away     TEXT NOT NULL,
+        venue         TEXT,
+        scheduled_at  INTEGER NOT NULL,
+        has_time      INTEGER NOT NULL DEFAULT 0,
+        competition   TEXT,
+        season        TEXT,
+        match_id      TEXT REFERENCES match(id),
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      )`,
+      // La consulta del calendario: partidos de un equipo por fecha.
+      'CREATE INDEX idx_fixture_team_date ON fixture (team_id, scheduled_at)',
     ],
   },
 ];
