@@ -22,6 +22,8 @@ export interface MatchesHomeProps {
   /** Partidos recientes, de más nuevo a más viejo. */
   recent?: readonly Match[];
   onOpenMatch?: (match: Match) => void;
+  /** Abre "Importar calendario"; sin él no se muestra el botón. */
+  onImportCalendar?: () => void;
 }
 
 /** Lo que se ve a la derecha de cada fila y si se puede abrir. */
@@ -53,7 +55,7 @@ export function plannedFormation(team: Team): { playersOnField: number; formatio
   return { playersOnField, formation };
 }
 
-export function MatchesHome({ service, onPlay, recent = [], onOpenMatch }: MatchesHomeProps) {
+export function MatchesHome({ service, onPlay, recent = [], onOpenMatch, onImportCalendar }: MatchesHomeProps) {
   const { colors } = useTheme();
   const { team, players } = useSquadState(service);
 
@@ -110,6 +112,17 @@ export function MatchesHome({ service, onPlay, recent = [], onOpenMatch }: Match
           Se te pedirá el rival, la fecha y la convocatoria. Juegan {playersOnField} en el campo; la alineación propuesta usa el dibujo
           {formation} y puedes cambiarla antes de iniciar.
         </Text>
+        {onImportCalendar ? (
+          <Pressable
+            onPress={onImportCalendar}
+            accessibilityRole="button"
+            accessibilityLabel="Importar calendario"
+            testID="import-calendar"
+            style={[styles.secondary, { borderColor: colors.accent, backgroundColor: colors.surface }]}
+          >
+            <Text style={[styles.secondaryText, { color: colors.accent }]}>IMPORTAR CALENDARIO</Text>
+          </Pressable>
+        ) : null}
         {recent.length > 0 ? (
           <>
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]} accessibilityRole="header">
@@ -178,6 +191,8 @@ const styles = StyleSheet.create({
   },
   playText: { fontSize: 20, fontWeight: '800', letterSpacing: 1 },
   disabled: { opacity: 0.5 },
+  secondary: { minHeight: 56, borderRadius: SIZES.radius, borderWidth: 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  secondaryText: { fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
   hint: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
   sectionLabel: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 12 },
   row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth },

@@ -103,10 +103,16 @@ Hecho también: guardar el calendario (migración 5, tabla `fixture`, `FixtureRe
 SQLite y memoria/web, `core/fixture.ts` con `fixturesFromCalendar`,
 `mergeImportedFixtures` —conserva lo ya jugado al reimportar— y `upcomingFixtures`),
 ya en `Persistence`.
-Pendiente: (1) "Importar calendario" (pegar texto) y "Próximos partidos" en Partidos, que al
-tocar uno abre P5 con rival, fecha, local/visitante, competición y jornada
-rellenos. El nombre del equipo real vive solo en la app del entrenador, no en
-el repo.
+Hecho también: **"Importar calendario"** (`CalendarImportScreen`, botón en
+Partidos): se pega el texto copiado de la RFAF y `importCalendar` guarda los
+partidos del equipo buscándolo por su nombre en la federación (sin distinguir
+mayúsculas, tildes ni comillas); reimportar sustituye el calendario y conserva
+lo ya jugado; un texto sin partidos del equipo no borra lo guardado; sin nombre
+en la federación lleva a Equipo. Pendiente: (1) "Próximos partidos" en Partidos,
+que al tocar uno abre P5 con rival, fecha, local/visitante, competición y
+jornada rellenos, y (2) marcar el partido del calendario como jugado
+(`FixtureRepository.linkMatch`) al crearlo desde él. El nombre del equipo real
+vive solo en la app del entrenador, no en el repo.
 
 **Hito M4 completo.** Siguiente (docs/06): M5/M6, ver el roadmap antes de
 empezar. Cosas conocidas pendientes: descartar

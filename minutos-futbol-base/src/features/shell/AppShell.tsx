@@ -9,7 +9,7 @@ import { useSquadState } from '../../state';
 import { useTheme } from '../../ui/theme';
 import type { Match } from '../../core/match';
 import { LiveMatchScreen, SummarySheet } from '../live-match';
-import { ConvocationScreen, LineupScreen, MatchSetupScreen } from '../match-setup';
+import { CalendarImportScreen, ConvocationScreen, LineupScreen, MatchSetupScreen } from '../match-setup';
 import { PlayerFormScreen, SquadScreen, TeamScreen } from '../squad';
 import type { PlayerFormResult } from '../squad/PlayerFormScreen';
 import { BootScreen } from './BootScreen';
@@ -18,6 +18,7 @@ import { MatchesHome } from './MatchesHome';
 import type { Persistence } from './persistence';
 import { ResumeMatchScreen } from './ResumeMatchScreen';
 import { findResumable, resumeMatch, type ResumableMatch } from './resumeMatch';
+import { importCalendar } from './importCalendar';
 import { endMatch, startMatch, type ActiveMatch } from './startMatch';
 import { viewMatch, type ViewedMatch } from './viewMatch';
 import { TabBar, type Tab } from './TabBar';
@@ -55,6 +56,7 @@ type Route =
   | { kind: 'tabs' }
   | { kind: 'player'; playerId: string | null }
   | ({ kind: 'new' } & NewMatchStep)
+  | { kind: 'calendar' }
   | { kind: 'match'; match: ActiveMatch }
   | { kind: 'summary'; viewed: ViewedMatch };
 
@@ -115,6 +117,10 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
         return true;
       }
       if (route.kind === 'match') return true;
+      if (route.kind === 'calendar') {
+        setRoute(TABS_ROUTE);
+        return true;
+      }
       if (route.kind === 'summary') {
         closeSummary(route.viewed);
         return true;
@@ -295,6 +301,20 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
       />
     );
   }
+  if (route.kind === 'calendar') {
+    const { team } = state;
+    return (
+      <CalendarImportScreen
+        federationName={team.federationName}
+        onImport={(text) => importCalendar({ persistence, team, text, now })}
+        onBack={() => setRoute(TABS_ROUTE)}
+        onGoToTeam={() => {
+          setTab('team');
+          setRoute(TABS_ROUTE);
+        }}
+      />
+    );
+  }
   if (route.kind === 'summary') {
     const { viewed } = route;
     return (
@@ -331,7 +351,7 @@ export function AppShell({ service, persistence, now = Date.now }: AppShellProps
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
-        {tab === 'matches' ? <MatchesHome service={service} onPlay={play} recent={recent} onOpenMatch={(m) => void openMatch(m)} /> : null}
+        {tab === 'matches' ? <MatchesHome service={service} onPlay={play} recent={recent} onOpenMatch={(m) => void openMatch(m)} onImportCalendar={() => setRoute({ kind: 'calendar' })} /> : null}
         {tab === 'squad' ? <SquadScreen service={service} onAddPlayer={addPlayer} onEditPlayer={editPlayer} scrollToEndKey={scrollToEndKey} /> : null}
         {tab === 'team' ? <TeamScreen service={service} /> : null}
       </View>

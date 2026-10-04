@@ -104,6 +104,16 @@ function tokenOffset(screen: RenderResult, id: string): { left: number; top: num
   throw new Error(`La ficha ${id} no está colocada en el campo`);
 }
 
+async function waitForFederationName(service: SquadService, expected: string): Promise<void> {
+  for (let i = 0; i < 50; i++) {
+    if (service.getState().team?.federationName === expected) return;
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+  throw new Error(`El nombre en la federación no llegó a ${expected}`);
+}
+
 async function waitForStatus(persistence: Persistence, matchId: string, status: string): Promise<void> {
   for (let i = 0; i < 50; i++) {
     if ((await persistence.matches.getMatch(matchId))?.status === status) return;
@@ -420,6 +430,37 @@ describe('AppShell — crear partido (P5-P7) y persistencia', () => {
     await fireEvent.press(screen.getByTestId('menu-button'));
     await fireEvent(screen.getByTestId('exit-button'), 'longPress');
     expect(await screen.findByText('vs CD Nuevo')).toBeTruthy();
+  });
+
+  it('Importar calendario: sin nombre en la federación lleva a Equipo; con él guarda los partidos y la lista queda en la persistencia', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const persistence = persistenceOf(service);
+    const screen = await renderShell(service);
+
+    await fireEvent.press(await screen.findByTestId('import-calendar'));
+    expect(await screen.findByTestId('calendar-no-name')).toBeTruthy();
+    expect(screen.queryByTestId('tab-bar')).toBeNull();
+    await fireEvent.press(screen.getByTestId('calendar-go-team'));
+    expect(await screen.findByTestId('team-federation-name')).toBeTruthy();
+    await fireEvent.changeText(screen.getByTestId('team-federation-name'), 'c.d. ejemplo "a"');
+    await fireEvent(screen.getByTestId('team-federation-name'), 'blur');
+    await waitForFederationName(service, 'c.d. ejemplo "a"');
+
+    await fireEvent.press(screen.getByTestId('tab-matches'));
+    await fireEvent.press(await screen.findByTestId('import-calendar'));
+    const text = ['3ª Liga Inventada Benjamín, Grupo 9', 'Temporada 2030-2031', 'Jornada 1 (20-09-2030)', 'UD NORTE\t    \tC.D. EJEMPLO "A"', 'Jornada 2 (27-09-2030)', 'C.D. EJEMPLO "A"\t    \tCLUB OTRO'].join('\n');
+    await fireEvent.changeText(await screen.findByTestId('calendar-input'), text);
+    await fireEvent.press(screen.getByTestId('calendar-import'));
+    expect(await screen.findByTestId('calendar-done-count')).toHaveTextContent('2 partidos guardados');
+
+    const teamId = service.getState().team!.id;
+    expect((await persistence.fixtures.listFixtures(teamId)).map((f) => [f.matchday, f.opponent, f.homeAway])).toEqual([
+      [1, 'UD NORTE', 'AWAY'],
+      [2, 'CLUB OTRO', 'HOME'],
+    ]);
+    await fireEvent.press(screen.getByTestId('calendar-finish'));
+    expect(await screen.findByTestId('play-match')).toBeTruthy();
   });
 
   it('← desde cada paso vuelve al anterior y desde P5 a Partidos, sin crear nada', async () => {
