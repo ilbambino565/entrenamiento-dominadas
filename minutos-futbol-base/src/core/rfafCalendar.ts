@@ -13,7 +13,8 @@ import type { HomeAway } from './match';
  * nombres largos y el campo se parten en varias líneas según el ancho, así que
  * se aplana el texto y se ancla el partido en el nombre del equipo propio: lo
  * que queda a un lado es el rival (y, si va delante, el equipo es visitante).
- * Los goles son opcionales ("–" a secas = sin jugar).
+ * Los goles pueden estar o no ("–" a secas = sin jugar): se descartan, la app
+ * no los usa, pero hay que reconocerlos para separar el rival.
  */
 export interface RfafFixture {
   matchday: number;
@@ -21,8 +22,6 @@ export interface RfafFixture {
   matchdayDate: number | null;
   opponent: string;
   homeAway: HomeAway;
-  ownScore: number | null;
-  opponentScore: number | null;
   venue: string | null;
   /** Fecha del partido en hora local; sin hora en la página es las 00:00 y `hasTime` es false. */
   scheduledAt: number;
@@ -58,9 +57,9 @@ const localMs = (y: number, m: number, d: number, hh = 0, mm = 0): number | null
 };
 
 /**
- * `HOME 3 – 1` → nombre y goles. El guion puede perderse al copiar ("3  1"), y
- * una sola cifra solo cuenta como gol si va con guion ("HOME 3 –"): sin él
- * ("ATLETICO 2") es parte del nombre.
+ * `HOME 3 – 1` → nombre y goles (que se descartan fuera). El guion puede
+ * perderse al copiar ("3  1"), y una sola cifra solo cuenta como gol si va con
+ * guion ("HOME 3 –"): sin él ("ATLETICO 2") es parte del nombre.
  */
 function splitScoreTail(text: string): { name: string; first: number | null; second: number | null } {
   const t = text.trim();
@@ -158,12 +157,10 @@ export function parseRfafCalendar(text: string, ownTeam: string): RfafCalendar {
       const after = chunk.slice(at + own.length).trim();
       const visiting = before.replace(/(?:\d+\s*)?[–—-]?\s*(?:\d+\s*)?$/, '').trim() !== '';
       if (visiting) {
-        const { name, first, second } = splitScoreTail(before);
-        fixtures.push({ matchday, matchdayDate, opponent: name, homeAway: 'AWAY', ownScore: second, opponentScore: first, venue: after || null, scheduledAt, hasTime });
+        fixtures.push({ matchday, matchdayDate, opponent: splitScoreTail(before).name, homeAway: 'AWAY', venue: after || null, scheduledAt, hasTime });
       } else {
-        const { first, second, rest } = splitScoreHead(after);
-        const { opponent, venue } = splitOpponentAndVenue(rest);
-        fixtures.push({ matchday, matchdayDate, opponent, homeAway: 'HOME', ownScore: first, opponentScore: second, venue, scheduledAt, hasTime });
+        const { opponent, venue } = splitOpponentAndVenue(splitScoreHead(after).rest);
+        fixtures.push({ matchday, matchdayDate, opponent, homeAway: 'HOME', venue, scheduledAt, hasTime });
       }
     }
   });

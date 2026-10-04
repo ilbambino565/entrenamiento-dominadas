@@ -90,9 +90,9 @@ localStorage (navegación privada) todo vive solo en memoria.
 leerla (`robots.txt`: `Disallow: /` salvo Google), así que no se descarga nada:
 el entrenador pega el texto que copia de la página. Hecho: `core/rfafCalendar.ts`
 (`parseRfafCalendar(texto, nombreDelEquipo)`): lee competición, temporada y,
-por jornada, los partidos del equipo (rival, local/visitante, goles, campo,
+por jornada, los partidos del equipo (rival, local/visitante, campo,
 fecha y hora local) anclándose en el nombre del equipo, con nombres partidos en
-varias líneas y el guion perdido al copiar. Tests con clubes inventados.
+varias líneas y el guion perdido al copiar. Los goles se reconocen pero se descartan (la app no los usa). Tests con clubes inventados.
 **Sin validar contra un texto pegado real** (el texto extraído del PDF de
 muestra sale con las columnas desordenadas y no sirve). Pendiente: (1) probar con
 un trozo copiado de la web, (2) campo "nombre en la federación" en el equipo

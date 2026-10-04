@@ -64,8 +64,6 @@ describe('parseRfafCalendar', () => {
         matchdayDate: ms(20, 9, 2030),
         opponent: 'PEÑA IMAGINARIA',
         homeAway: 'HOME',
-        ownScore: 8,
-        opponentScore: 2,
         venue: 'Ciudad - La Fuensanta Campo Municipal (F11-F7) (A)',
         scheduledAt: ms(18, 9, 2030, 18, 45),
         hasTime: true,
@@ -75,8 +73,6 @@ describe('parseRfafCalendar', () => {
         matchdayDate: ms(20, 9, 2030),
         opponent: 'CLUB OTRO',
         homeAway: 'AWAY',
-        ownScore: 1,
-        opponentScore: 3,
         venue: 'Otra - Luís Teruel Campo Municipal (F11,F7) (A)',
         scheduledAt: ms(19, 9, 2030, 12, 0),
         hasTime: true,
@@ -86,8 +82,6 @@ describe('parseRfafCalendar', () => {
         matchdayDate: ms(27, 9, 2030),
         opponent: 'UD NORTE',
         homeAway: 'AWAY',
-        ownScore: null,
-        opponentScore: null,
         venue: 'Ciudad - Campo Norte (F11-F7) (A)',
         scheduledAt: ms(25, 9, 2030, 17, 0),
         hasTime: true,
@@ -97,8 +91,6 @@ describe('parseRfafCalendar', () => {
         matchdayDate: ms(27, 9, 2030),
         opponent: 'ATLETICO SUR "B"',
         homeAway: 'HOME',
-        ownScore: null,
-        opponentScore: null,
         venue: 'Ciudad - Roma Luz Campo Municipal (F11-F7) (A)',
         scheduledAt: ms(10, 10, 2030),
         hasTime: false,
@@ -108,8 +100,6 @@ describe('parseRfafCalendar', () => {
         matchdayDate: ms(4, 10, 2030),
         opponent: 'CLUB OTRO',
         homeAway: 'HOME',
-        ownScore: 2,
-        opponentScore: 12,
         venue: 'Ciudad - Pedro Campo (F11-F7) (A)',
         scheduledAt: ms(2, 10, 2030, 18, 0),
         hasTime: true,
@@ -119,9 +109,9 @@ describe('parseRfafCalendar', () => {
 
   it('con los nombres y el campo partidos en varias líneas da el mismo resultado', () => {
     const { fixtures } = parseRfafCalendar(WRAPPED, OWN);
-    expect(fixtures.map((f) => [f.matchday, f.opponent, f.homeAway, f.ownScore, f.opponentScore])).toEqual([
-      [1, 'PEÑA IMAGINARIA', 'HOME', 8, 2],
-      [1, 'CLUB OTRO INVENTADO "B"', 'AWAY', 1, 3],
+    expect(fixtures.map((f) => [f.matchday, f.opponent, f.homeAway])).toEqual([
+      [1, 'PEÑA IMAGINARIA', 'HOME'],
+      [1, 'CLUB OTRO INVENTADO "B"', 'AWAY'],
     ]);
     expect(fixtures[0]?.venue).toBe('Ciudad - La Fuensanta Campo Municipal (F11- F7) (A)');
   });
@@ -140,7 +130,7 @@ C.D. EJEMPLO "A" 3 – 0 UD NORTE Ciudad - Campo (A) 20-09-2030 - 12:00
 `;
     const { fixtures } = parseRfafCalendar(text, OWN);
     expect(fixtures).toHaveLength(1);
-    expect(fixtures[0]?.ownScore).toBe(3);
+    expect(fixtures[0]).toMatchObject({ opponent: 'UD NORTE', scheduledAt: ms(20, 9, 2030, 12, 0) });
   });
 
   it('un rival escrito en minúsculas se separa del campo por el guion', () => {
@@ -161,14 +151,14 @@ C.D. EJEMPLO "A" – UD NORTE Ciudad - Campo (A) 31-02-2030 - 10:00
     expect(parseRfafCalendar('', OWN).fixtures).toEqual([]);
   });
 
-  it('un nombre que acaba en cifra no se toma por goles y un solo gol con guion sí', () => {
+  it('un nombre que acaba en cifra no se toma por goles y un solo gol con guion sí se descarta', () => {
     const text = `Jornada 1 (20-09-2030)
 ATLETICO 2 – C.D. EJEMPLO "A" Ciudad - Campo (A) 20-09-2030 - 10:00
 ATLETICO 2 5 – C.D. EJEMPLO "A" Ciudad - Campo (A) 21-09-2030 - 10:00
 `;
     const [first, second] = parseRfafCalendar(text, OWN).fixtures;
-    expect(first).toMatchObject({ opponent: 'ATLETICO', opponentScore: 2, ownScore: null });
-    expect(second).toMatchObject({ opponent: 'ATLETICO 2', opponentScore: 5, ownScore: null });
+    expect(first?.opponent).toBe('ATLETICO');
+    expect(second?.opponent).toBe('ATLETICO 2');
   });
 
   it('una jornada sin fecha en la cabecera no la inventa y el resto sigue funcionando', () => {
