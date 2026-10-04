@@ -49,8 +49,8 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
    entrega titulares y banquillo con INICIAR PARTIDO; P8 los recibe por sus
    props `lineup`/`bench` y arranca en READY.
 5. ✅ **Partido persistente**: `openPersistence(.web)` abre plantilla, partidos
-   y timeline juntos (SQLite en nativo; en web, plantilla con `localStorage` y
-   partidos y timeline solo en memoria). JUGAR PARTIDO abre P5→P6→P7;
+   y timeline juntos (SQLite en nativo; en web, memoria con copia en
+   `localStorage`: plantilla, partidos y una clave de timeline por partido). JUGAR PARTIDO abre P5→P6→P7;
    INICIAR PARTIDO crea `match` + `match_player` y la sesión con el
    `EventStore` persistente y el `matchId` del repositorio
    (`shell/startMatch.ts`). `trackMatchProgress` mantiene `status`,
@@ -64,8 +64,8 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
    abre P8 con `resumeMatch` (sesión sobre la misma timeline, sin repetir la
    alineación). Un convocado ya eliminado de la plantilla sale como "Jugador
    eliminado". No hay (todavía) forma de descartar el partido sin continuarlo:
-   se termina desde P8. En web solo aplica dentro de la misma pestaña (la
-   timeline no se guarda).
+   se termina desde P8. En web también funciona al recargar la página (ver
+   "Web" más abajo).
 7. ✅ **P1 Partidos**: `MatchesHome` lista los 20 más recientes
    (`sáb 27/09 · vs rival · estado`) bajo JUGAR PARTIDO y se relee al volver a
    las pestañas. Un partido terminado (✓) abre el resumen `SummarySheet`
@@ -74,9 +74,21 @@ Orden propuesto, en pasos pequeños (cada uno con tests y commit):
    no distingue "suspendido" (el motivo del final solo está en la timeline) y no
    hay borrar partidos.
 
+**Web (persistencia).** `InMemoryEventStore` y `InMemoryMatchRepository`
+aceptan un `storage` (localStorage). La timeline va una clave por partido
+(`minutos-futbol-base.events.v1.<matchId>`, filas `match_event` en JSON) y se
+lee de forma perezosa; los partidos, en `minutos-futbol-base.matches.v1`. Cada
+escritura se confirma en el storage ANTES de actualizar la memoria (si falla, la
+promesa rechaza y la pantalla no muestra lo no guardado). Una timeline ilegible
+NO se descarta ni se pisa: ese partido no abre (la timeline es la verdad); unos
+`matches` ilegibles sí se copian a `.corrupt` y se arranca vacío, como la
+plantilla. Límite: la cuota de `localStorage` (~5 MB) la comen sobre todo las
+fotos de la plantilla; con el almacenamiento lleno, guardar rechaza. Sin
+localStorage (navegación privada) todo vive solo en memoria.
+
 **Hito M4 completo.** Siguiente (docs/06): M5/M6, ver el roadmap antes de
-empezar. Cosas conocidas pendientes: persistir la timeline en web, descartar
-un partido atascado, "suspendido" en la lista, y los 13 errores de
+empezar. Cosas conocidas pendientes: descartar
+un partido atascado, avisar en pantalla si el almacenamiento web se llena, "suspendido" en la lista, y los 13 errores de
 `expo lint` anteriores a M4 (`ClockBar`, `useDragAndDrop`).
 
 ## 8.4 Cómo trabajar barato

@@ -18,7 +18,7 @@ Formato inicial: fútbol 7. Arquitectura preparada para fútbol 8 y fútbol 11.
 > pestañas (Partidos · Plantilla · Equipo) propia, sin Expo Router todavía
 > (ver [doc 5](docs/05-navegacion-pantallas.md) §5.1). JUGAR PARTIDO abre el
 > asistente (rival y fecha, convocatoria, alineación) y después la pantalla P8;
-> el partido y su timeline se guardan en SQLite (en web, solo en memoria).
+> el partido y su timeline se guardan en SQLite (en web, en `localStorage`).
 > Al arrancar ofrece continuar un partido en curso (P0) y Partidos lista los
 > recientes con su resumen (P1, hito M4 completo).
 
