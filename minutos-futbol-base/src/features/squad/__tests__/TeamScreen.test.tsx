@@ -94,6 +94,20 @@ describe('TeamScreen (P4)', () => {
     expect(updateTeam).toHaveBeenLastCalledWith({ category: null });
   });
 
+  it('el nombre en la federación se precarga, se guarda al perder el foco normalizado y vacío es null; explica para qué sirve', async () => {
+    const { screen, updateTeam } = await setup({ team: makeTeam({ federationName: 'C.D. EJEMPLO "A"' }) });
+    expect(screen.getByTestId('team-federation-name').props.value).toBe('C.D. EJEMPLO "A"');
+    expect(screen.getByTestId('team-federation-hint')).toHaveTextContent(/calendario de la RFAF/);
+
+    await fireEvent.changeText(screen.getByTestId('team-federation-name'), '  UD   NORTE "B" ');
+    await fireEvent(screen.getByTestId('team-federation-name'), 'blur');
+    expect(updateTeam).toHaveBeenLastCalledWith({ federationName: 'UD NORTE "B"' });
+
+    await fireEvent.changeText(screen.getByTestId('team-federation-name'), '   ');
+    await fireEvent(screen.getByTestId('team-federation-name'), 'blur');
+    expect(updateTeam).toHaveBeenLastCalledWith({ federationName: null });
+  });
+
   it('nombre vacío o minutos inválidos no se guardan y muestran el motivo', async () => {
     const { screen, updateTeam } = await setup();
     await fireEvent.changeText(screen.getByTestId('team-name'), '   ');

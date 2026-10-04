@@ -18,6 +18,7 @@ export interface TeamRow {
   id: string;
   name: string;
   category: string | null;
+  federation_name: string | null;
   default_format: string;
   default_formation: string | null;
   periods_count: number;
@@ -88,6 +89,7 @@ export function teamToRow(team: Team): TeamRow {
     id: team.id,
     name: team.name,
     category: team.category ?? null,
+    federation_name: team.federationName ?? null,
     default_format: team.defaultFormat,
     default_formation: team.defaultFormation ?? null,
     periods_count: team.periodsCount,
@@ -107,6 +109,7 @@ export function rowToTeam(row: TeamRow): Team {
     id: read.text('id', row.id),
     name: read.text('name', row.name),
     category: read.textOrNull('category', row.category),
+    federationName: read.textOrNull('federation_name', row.federation_name),
     defaultFormat: read.oneOf('default_format', row.default_format, GAME_FORMAT_IDS),
     defaultFormation: read.textOrNull('default_formation', row.default_formation),
     periodsCount: read.integer('periods_count', row.periods_count),
@@ -171,6 +174,7 @@ export function parseStoredTeam(value: unknown): Team {
     id: value.id,
     name: value.name,
     category: value.category,
+    federation_name: value.federationName,
     default_format: value.defaultFormat,
     default_formation: value.defaultFormation,
     periods_count: value.periodsCount,

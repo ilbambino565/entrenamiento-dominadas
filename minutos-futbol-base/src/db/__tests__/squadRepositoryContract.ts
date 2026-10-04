@@ -21,6 +21,7 @@ export function makeTeam(overrides: Partial<Team> = {}): Team {
     id: TEAM_ID,
     name: 'CD Prueba',
     category: 'Alevín',
+    federationName: null,
     defaultFormat: 'F7',
     defaultFormation: null,
     periodsCount: 2,
@@ -99,6 +100,7 @@ export function describeSquadRepositoryContract(
         const full = makeTeam({
           name: 'UD Niños ⚽',
           category: 'Benjamín A',
+          federationName: 'C.D. EJEMPLO "A"',
           defaultFormat: 'F8',
           defaultFormation: '3-1-2',
           periodsCount: 4,

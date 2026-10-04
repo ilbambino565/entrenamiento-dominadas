@@ -20,6 +20,7 @@ const TEAM_COLUMNS = [
   'id',
   'name',
   'category',
+  'federation_name',
   'default_format',
   'default_formation',
   'periods_count',

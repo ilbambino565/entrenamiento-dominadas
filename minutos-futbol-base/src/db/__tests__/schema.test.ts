@@ -110,7 +110,7 @@ describeWithSqlite('schema: DDL contra SQLite real', () => {
       }[]
     ).map((c) => [c.name, c.type, c.notnull === 1, c.dflt_value, c.pk === 1]);
 
-  it('v2: crea team con las columnas, NOT NULL y DEFAULT esperados', () => {
+  it('v2 y v4: crea team con las columnas, NOT NULL y DEFAULT esperados (federation_name se añade al final)', () => {
     expect(columnInfo('team')).toEqual([
       ['id', 'TEXT', false, null, true],
       ['name', 'TEXT', true, null, false],
@@ -123,6 +123,7 @@ describeWithSqlite('schema: DDL contra SQLite real', () => {
       ['created_at', 'INTEGER', true, null, false],
       ['updated_at', 'INTEGER', true, null, false],
       ['deleted_at', 'INTEGER', false, null, false],
+      ['federation_name', 'TEXT', false, null, false],
     ]);
   });
 

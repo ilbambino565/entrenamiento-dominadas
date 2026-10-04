@@ -4,13 +4,14 @@
  * - v1 (hito M1): la timeline (`match_event`) y `app_meta`.
  * - v2 (hito M3): equipo y plantilla (`team`, `player`).
  * - v3 (hito M4): partidos y convocatoria (`match`, `match_player`).
+ * - v4: `team.federation_name` (nombre del equipo en el calendario de la federación).
  *
  * Las proyecciones (`clock_segment`, `player_interval`) llegarán como migraciones nuevas.
  * Una migración publicada NUNCA se edita: una base ya migrada no volvería a
  * ejecutarla y quedaría distinta de una base nueva.
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export interface Migration {
   /** Consecutivo desde 1. Se escribe en `PRAGMA user_version` al aplicarla. */
@@ -177,6 +178,16 @@ export const MIGRATIONS: readonly Migration[] = [
         deleted_at        INTEGER,
         UNIQUE (match_id, player_id)
       )`,
+    ],
+  },
+  {
+    version: 4,
+    statements: [
+      // Cómo se llama el equipo en el calendario de la federación (RFAF): el
+      // lector del calendario pegado lo usa para encontrar sus partidos. Puede
+      // diferir del nombre que le da el entrenador ("Alevín A" vs "C.D. X "A""),
+      // y es un dato del dispositivo: no entra en el repositorio. NULL = sin informar.
+      'ALTER TABLE team ADD COLUMN federation_name TEXT',
     ],
   },
 ];

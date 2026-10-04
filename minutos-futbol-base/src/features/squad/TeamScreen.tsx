@@ -74,6 +74,7 @@ function TeamForm({ service, team, players }: { service: SquadService; team: Tea
   const { colors } = useTheme();
   const [name, setName] = useState(team.name);
   const [category, setCategory] = useState(team.category ?? '');
+  const [federationName, setFederationName] = useState(team.federationName ?? '');
   const [minutes, setMinutes] = useState(String(Math.round(team.periodDurationMs / MINUTE_MS)));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -105,6 +106,9 @@ function TeamForm({ service, team, players }: { service: SquadService; team: Tea
     const trimmedCategory = category.trim();
     const nextCategory = trimmedCategory === '' ? null : trimmedCategory;
     if (nextCategory !== team.category) patch.category = nextCategory;
+    const trimmedFederation = federationName.trim().replace(/\s+/g, ' ');
+    const nextFederation = trimmedFederation === '' ? null : trimmedFederation;
+    if (nextFederation !== team.federationName) patch.federationName = nextFederation;
     const periodDurationMs = parsePeriodMinutes(minutes);
     if (periodDurationMs === null) {
       setError(`Los minutos por parte deben estar entre ${PERIOD_MINUTES_MIN} y ${PERIOD_MINUTES_MAX}`);
@@ -116,7 +120,7 @@ function TeamForm({ service, team, players }: { service: SquadService; team: Tea
       return;
     }
     update(patch);
-  }, [name, category, minutes, team, update]);
+  }, [name, category, federationName, minutes, team, update]);
 
   // Al cambiar de pestaña la pantalla se desmonta sin `onBlur`: lo escrito se guarda igualmente.
   const latestSave = useRef(saveTexts);
@@ -144,6 +148,19 @@ function TeamForm({ service, team, players }: { service: SquadService; team: Tea
 
         <FormField label="Nombre" value={name} onChangeText={setName} onBlur={saveTexts} testID="team-name" />
         <FormField label="Categoría" value={category} onChangeText={setCategory} onBlur={saveTexts} testID="team-category" placeholder="Alevín, Benjamín…" />
+
+        <FormField
+          label="Nombre en la federación"
+          value={federationName}
+          onChangeText={setFederationName}
+          onBlur={saveTexts}
+          testID="team-federation-name"
+          placeholder='C.D. EJEMPLO "A"'
+          autoCapitalize="characters"
+        />
+        <Text style={[styles.preview, styles.hint, { color: colors.textMuted }]} testID="team-federation-hint">
+          Tal como sale en el calendario de la RFAF. Sirve para encontrar tus partidos al importarlo.
+        </Text>
 
         <Section label="Formato">
           <ChipRow>
@@ -226,4 +243,5 @@ const styles = StyleSheet.create({
   minutesField: { flex: 1 },
   error: { marginBottom: 12, fontSize: 15, fontWeight: '600' },
   preview: { marginTop: 8, fontSize: 14 },
+  hint: { marginTop: -6, marginBottom: 14 },
 });

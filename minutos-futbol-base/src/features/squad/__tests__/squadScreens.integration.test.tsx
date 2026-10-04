@@ -45,6 +45,7 @@ function makeService(repo: SquadRepository): SquadService {
 const TEAM: TeamDraft = {
   name: 'CD Prueba',
   category: 'Alevín',
+  federationName: null,
   defaultFormat: 'F7',
   defaultFormation: null,
   periodsCount: 2,

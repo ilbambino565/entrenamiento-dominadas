@@ -66,7 +66,7 @@ function createRecordingDb() {
 }
 
 const TEAM_COLUMNS =
-  'id, name, category, default_format, default_formation, periods_count, period_duration_ms, display_name_mode, created_at, updated_at, deleted_at';
+  'id, name, category, federation_name, default_format, default_formation, periods_count, period_duration_ms, display_name_mode, created_at, updated_at, deleted_at';
 const PLAYER_COLUMNS =
   'id, team_id, first_name, last_name, shirt_number, is_goalkeeper, is_active, photo_uri, photo_consent, sort_order, created_at, updated_at, deleted_at';
 
@@ -84,11 +84,12 @@ describe('SqliteSquadRepository: forma de las sentencias (doble que registra)', 
     await repo.saveTeam(team);
     expect(fake.state.log).toEqual(['BEGIN', 'INSERT INTO team', 'COMMIT']);
     expect(fake.state.calls[0]?.sql).toBe(
-      `INSERT INTO team (${TEAM_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, category = excluded.category, default_format = excluded.default_format, default_formation = excluded.default_formation, periods_count = excluded.periods_count, period_duration_ms = excluded.period_duration_ms, display_name_mode = excluded.display_name_mode, created_at = excluded.created_at, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at`,
+      `INSERT INTO team (${TEAM_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, category = excluded.category, federation_name = excluded.federation_name, default_format = excluded.default_format, default_formation = excluded.default_formation, periods_count = excluded.periods_count, period_duration_ms = excluded.period_duration_ms, display_name_mode = excluded.display_name_mode, created_at = excluded.created_at, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at`,
     );
     expect(fake.state.calls[0]?.params).toEqual([
       TEAM_ID,
       'CD Prueba',
+      null,
       null,
       'F7',
       '3-1-2',
@@ -214,6 +215,7 @@ describeWithSqlite('SqliteSquadRepository contra SQLite real', () => {
     expect(native.prepare('SELECT * FROM match_event ORDER BY seq').all()).toEqual(before);
     const tables = (native.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
     expect(tables).toEqual(['app_meta', 'match_event', 'player', 'team']);
+    await migrate(db);
     expect((native.prepare('PRAGMA index_info(idx_player_team_order)').all() as { name: string }[]).map((i) => i.name)).toEqual([
       'team_id',
       'sort_order',

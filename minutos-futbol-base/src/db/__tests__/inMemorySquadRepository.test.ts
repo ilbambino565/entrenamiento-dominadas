@@ -60,6 +60,14 @@ describe('InMemorySquadRepository: storage', () => {
     expect(DEFAULT_SQUAD_STORAGE_KEY).toBe('minutos-futbol-base.squad.v1');
   });
 
+  it('un JSON guardado antes de existir federationName se lee con federationName null', async () => {
+    const { federationName: _omitted, ...legacy } = makeTeam();
+    const storage = createFakeStorage({ [DEFAULT_SQUAD_STORAGE_KEY]: JSON.stringify({ version: 1, team: legacy, players: [] }) });
+    const repo = createInMemorySquadRepository({ storage });
+    expect(await repo.getTeam()).toEqual(makeTeam({ federationName: null }));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('respeta storageKey', async () => {
     const storage = createFakeStorage();
     const repo = createInMemorySquadRepository({ storage, storageKey: 'pruebas.squad' });

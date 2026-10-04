@@ -33,15 +33,25 @@ describeWithSqlite('SqliteMatchRepository', () => {
 
     await migrate(db, MIGRATIONS.slice(0, 2));
     expect(userVersion()).toBe(2);
-    const squad = createSqliteSquadRepository(db);
-    await squad.saveTeam(makeTeam());
-    await squad.savePlayer(makePlayer(1));
+    // En v2 `team` aún no tiene `federation_name`: el repositorio de hoy no sirve, se inserta a mano.
+    const team = makeTeam();
+    const player = makePlayer(1);
+    native
+      .prepare('INSERT INTO team (id, name, category, default_format, default_formation, periods_count, period_duration_ms, display_name_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(team.id, team.name, team.category, team.defaultFormat, team.defaultFormation, team.periodsCount, team.periodDurationMs, team.displayNameMode, team.createdAt, team.updatedAt);
+    native
+      .prepare('INSERT INTO player (id, team_id, first_name, last_name, shirt_number, is_goalkeeper, is_active, photo_uri, photo_consent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(player.id, player.teamId, player.firstName, player.lastName, player.shirtNumber, 1, 1, null, 0, player.sortOrder, player.createdAt, player.updatedAt);
 
-    await migrate(db);
+    await migrate(db, MIGRATIONS.slice(0, 3));
     expect(userVersion()).toBe(3);
+    await migrate(db);
+    expect(userVersion()).toBe(4);
     const tables = (native.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
     expect(tables).toEqual(['app_meta', 'match', 'match_event', 'match_player', 'player', 'team']);
-    expect(await squad.listPlayers(TEAM_ID)).toEqual([makePlayer(1)]);
+    const squad = createSqliteSquadRepository(db);
+    expect(await squad.getTeam()).toEqual(team);
+    expect(await squad.listPlayers(TEAM_ID)).toEqual([player]);
 
     const matches = createSqliteMatchRepository(db);
     await matches.createMatch(makeMatch(1), [makeMatchPlayer('match-1', 1)]);

@@ -148,6 +148,7 @@ const toPlayerDraft = (p: Player): PlayerDraft => ({
 const toTeamDraft = (t: Team): TeamDraft => ({
   name: t.name,
   category: t.category,
+  federationName: t.federationName,
   defaultFormat: t.defaultFormat,
   defaultFormation: t.defaultFormation,
   periodsCount: t.periodsCount,
@@ -155,12 +156,13 @@ const toTeamDraft = (t: Team): TeamDraft => ({
   displayNameMode: t.displayNameMode,
 });
 
-/** Nombre y categoría sin espacios sobrantes; categoría vacía → null. El nombre es obligatorio. */
+/** Nombre, categoría y nombre en la federación sin espacios sobrantes; los vacíos → null. El nombre es obligatorio. */
 function cleanTeamDraft(draft: TeamDraft): TeamDraft {
   const name = draft.name.trim();
   const category = (draft.category ?? '').trim();
+  const federationName = (draft.federationName ?? '').trim().replace(/\s+/g, ' ');
   if (name === '') throw new SquadError('VALIDATION', 'El nombre del equipo es obligatorio');
-  return { ...draft, name, category: category === '' ? null : category };
+  return { ...draft, name, category: category === '' ? null : category, federationName: federationName === '' ? null : federationName };
 }
 
 /** Borrador normalizado y validado contra la plantilla; los errores bloqueantes rechazan sin tocar el repositorio. */
@@ -421,6 +423,7 @@ export function createSquadService(deps: SquadServiceDeps): SquadService {
         id: newId(),
         name: pack.teamName,
         category: null,
+        federationName: null,
         defaultFormat: 'F7',
         defaultFormation: pack.formation ?? null,
         periodsCount: f7.defaultPeriodsCount,

@@ -18,6 +18,7 @@ const MINUTE = 60_000;
 const TEAM_DRAFT: TeamDraft = {
   name: 'CD Prueba',
   category: 'Alevín',
+  federationName: null,
   defaultFormat: 'F7',
   defaultFormation: null,
   periodsCount: 2,
@@ -224,6 +225,16 @@ describe('createSquadService', () => {
       expect(updated.category).toBe('Alevín');
       expect(service.getState().team).toBe(updated);
     });
+
+    it('el nombre en la federación se guarda sin espacios sobrantes (también internos) y vacío es null', async () => {
+      const { service } = setup();
+      await service.load();
+      const created = await service.createTeam({ ...TEAM_DRAFT, federationName: '  C.D.  EJEMPLO   "A" ' });
+      expect(created.federationName).toBe('C.D. EJEMPLO "A"');
+      expect((await service.updateTeam({ federationName: '   ' })).federationName).toBeNull();
+      expect((await service.updateTeam({ category: 'Benjamín' })).federationName).toBeNull();
+      expect((await service.updateTeam({ federationName: 'UD NORTE' })).federationName).toBe('UD NORTE');
+    });
   });
 
   describe('jugadores', () => {
@@ -398,6 +409,7 @@ describe('createSquadService', () => {
         id: 'id-001',
         name: 'CD Paquete',
         category: null,
+        federationName: null,
         defaultFormat: 'F7',
         defaultFormation: '3-1-2',
         periodsCount: 2,

@@ -43,6 +43,7 @@ export function makeTeam(overrides: Partial<Team> = {}): Team {
     id: 'team-1',
     name: 'CD Prueba',
     category: null,
+    federationName: null,
     defaultFormat: 'F7',
     defaultFormation: null,
     periodsCount: 2,

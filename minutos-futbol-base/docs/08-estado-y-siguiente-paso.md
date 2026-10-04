@@ -97,9 +97,9 @@ da la fecha de la jornada y `hasTime` false; la completa trae fecha, hora y
 campo de cada partido. Los goles se reconocen pero se descartan. Tests con clubes
 inventados. Como la resumida no trae hora, P5 deja editables fecha y hora (ya lo
 son): el calendario solo las rellena con la fecha de la jornada, normalmente un
-domingo, y el entrenador la ajusta. Pendiente: (1) campo "nombre en la
-federación" en el equipo (migración 4), (2) guardar el calendario importado,
-(3) "Importar calendario" (pegar texto) y "Próximos partidos" en Partidos, que al
+domingo, y el entrenador la ajusta. Hecho también: campo "Nombre en la
+federación" en Equipo (P4) y `team.federation_name` (migración 4, `Team.federationName`).
+Pendiente: (1) guardar el calendario importado, (2) "Importar calendario" (pegar texto) y "Próximos partidos" en Partidos, que al
 tocar uno abre P5 con rival, fecha, local/visitante, competición y jornada
 rellenos. El nombre del equipo real vive solo en la app del entrenador, no en
 el repo.

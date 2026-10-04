@@ -192,6 +192,12 @@ CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   los use. `MatchRepository` (`createMatch` con su convocatoria en una
   transacción, `getMatch`, `listRecentMatches`, `listMatchPlayers`,
   `saveProgress`) tiene variante SQLite y en memoria con el mismo contrato.
+- **Migración 4 (`team.federation_name`):** nombre del equipo tal como sale en
+  el calendario de la federación (RFAF), que puede diferir del que le da el
+  entrenador. `TEXT` nulo, columna añadida con `ALTER TABLE` (queda al final de
+  la tabla). Es un dato del dispositivo: nunca va al repositorio. Lo usa el
+  lector del calendario pegado (`core/rfafCalendar.ts`) para encontrar los
+  partidos del equipo.
 - **`player.photo_uri`** admite un **data URI** (JPEG pequeño, recortado y
   comprimido) además de una URI de archivo local: así la foto viaja con la
   fila (copia, web con localStorage) y no se pierde si el archivo desaparece.

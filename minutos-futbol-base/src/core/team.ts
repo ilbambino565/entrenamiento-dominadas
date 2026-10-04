@@ -10,6 +10,8 @@ export interface Team {
   id: string;
   name: string;
   category: string | null;
+  /** Nombre del equipo tal como sale en el calendario de la federación; null si no se ha indicado. */
+  federationName: string | null;
   defaultFormat: GameFormatId;
   /** Dibujo por defecto de los titulares ('3-1-2'…); null = el de referencia del formato. */
   defaultFormation: string | null;
@@ -44,7 +46,7 @@ export interface Player {
 export type PlayerDraft = Pick<Player, 'firstName' | 'lastName' | 'shirtNumber' | 'isGoalkeeper' | 'isActive' | 'photoUri' | 'photoConsent'>;
 
 /** Lo que edita en la pantalla Equipo (P4). */
-export type TeamDraft = Pick<Team, 'name' | 'category' | 'defaultFormat' | 'defaultFormation' | 'periodsCount' | 'periodDurationMs' | 'displayNameMode'>;
+export type TeamDraft = Pick<Team, 'name' | 'category' | 'federationName' | 'defaultFormat' | 'defaultFormation' | 'periodsCount' | 'periodDurationMs' | 'displayNameMode'>;
 
 /**
  * Proyección de un jugador para las pantallas de partido (ficha): nombre ya

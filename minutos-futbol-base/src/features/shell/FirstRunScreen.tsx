@@ -28,6 +28,7 @@ export function firstTeamDraft(name: string): TeamDraft {
   return {
     name,
     category: null,
+    federationName: null,
     defaultFormat: 'F7',
     defaultFormation: null,
     periodsCount: f7.defaultPeriodsCount,

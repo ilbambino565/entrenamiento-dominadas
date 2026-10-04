@@ -36,6 +36,7 @@ function stubRepository(): SquadRepository {
 const TEAM_DRAFT: TeamDraft = {
   name: 'CD Prueba',
   category: null,
+  federationName: null,
   defaultFormat: 'F7',
   defaultFormation: null,
   periodsCount: 2,

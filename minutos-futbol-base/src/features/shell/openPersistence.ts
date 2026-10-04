@@ -10,7 +10,7 @@ import type { Persistence } from './persistence';
  * se resuelve sin configuración extra y rompería `expo export --platform
  * web`). El import de `db/client` es perezoso, dentro de la función: es el
  * único módulo que carga `expo-sqlite` en ejecución y solo debe hacerlo al
- * abrir la base. `openAppDatabase` fija los PRAGMAs y migra (user_version 3).
+ * abrir la base. `openAppDatabase` fija los PRAGMAs y migra (hasta SCHEMA_VERSION).
  */
 export async function openPersistence(): Promise<Persistence> {
   const { openAppDatabase } = await import('../../db/client');
