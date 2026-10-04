@@ -208,9 +208,9 @@ describeWithSqlite('SqliteSquadRepository contra SQLite real', () => {
     insert.run('e3', 'm1', 3, 'MATCH_PAUSED', T0 + 2000, 2000, 1, null, null, '{}', 'user', T0 + 2500, T0 + 2000);
     const before = native.prepare('SELECT * FROM match_event ORDER BY seq').all();
 
-    await migrate(db);
+    await migrate(db, MIGRATIONS.slice(0, 2));
     expect(userVersion()).toBe(2);
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
     expect(native.prepare('SELECT * FROM match_event ORDER BY seq').all()).toEqual(before);
     const tables = (native.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
     expect(tables).toEqual(['app_meta', 'match_event', 'player', 'team']);

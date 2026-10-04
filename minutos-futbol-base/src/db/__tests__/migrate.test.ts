@@ -22,7 +22,7 @@ describeWithSqlite('migrate contra SQLite real', () => {
     expect(userVersion()).toBe(0);
     await migrate(db);
     expect(userVersion()).toBe(SCHEMA_VERSION);
-    expect(tables()).toEqual(['app_meta', 'match_event', 'player', 'team']);
+    expect(tables()).toEqual(['app_meta', 'match', 'match_event', 'match_player', 'player', 'team']);
   });
 
   it('es idempotente: la segunda vez no abre ninguna transacción', async () => {

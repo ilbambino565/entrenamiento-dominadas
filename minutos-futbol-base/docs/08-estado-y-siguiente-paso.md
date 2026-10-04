@@ -16,8 +16,8 @@ el historial. Actualízala al cerrar cada hito.
 ## 8.2 Qué hay hecho (hitos M1, M2 parcial, M3 y la pantalla P8)
 
 - `src/core`: dominio puro (eventos, reducer, tiempos, dibujos, plantilla).
-- `src/db`: SQLite versionado (migración 1: timeline; 2: equipo y plantilla),
-  repositorios de eventos y de plantilla, variante en memoria con
+- `src/db`: SQLite versionado (migración 1: timeline; 2: equipo y plantilla;
+  3: partido y convocatoria), repositorios de eventos, plantilla y partidos, variante en memoria con
   `localStorage` para web.
 - `src/app-services`: `MatchEngine` (partido), `SquadService` (plantilla),
   cámara desacoplada (dormida).
@@ -34,7 +34,7 @@ el historial. Actualízala al cerrar cada hito.
 
 Orden propuesto, en pasos pequeños (cada uno con tests y commit):
 
-1. **Tabla `match` y repositorio** (`src/db`): migración 3 con `match` y
+1. ✅ **Tabla `match` y repositorio** (`src/db`): migración 3 con `match` y
    `match_player` (docs/02), `MatchRepository` (crear, listar recientes,
    marcar estado/finalizado) con contrato en memoria + SQLite.
 2. **P5 Datos del partido**: rival, fecha, partes × minutos (por defecto los

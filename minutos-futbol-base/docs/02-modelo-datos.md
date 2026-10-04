@@ -181,7 +181,17 @@ CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `team.color_secondary` y `player.usual_position`. Llegarán en una migración
   posterior cuando una pantalla las use (el escudo y los colores de la
   pantalla de partido vienen hoy del paquete de equipo). Tampoco existen aún
-  `season`, `match`, `match_player` ni las proyecciones.
+  `season` ni las proyecciones.
+- **Migración 3 (`match`, `match_player`, hito M4):** `match` sin `season_id` ni
+  `camera_settings` (el MVP no tiene temporadas ni cámara integrada; llegarán
+  en una migración cuando una pantalla las use) y con índice
+  `idx_match_scheduled ON match(scheduled_at)` para la lista de recientes.
+  `match_player` solo con `shirt_number`, `is_goalkeeper`, `in_initial_lineup`
+  y `bench_order`: `location`, `pos_x/y`, `was_starter`, `is_unavailable` y
+  `added_late` son proyección del partido en curso y llegan con el paso que
+  los use. `MatchRepository` (`createMatch` con su convocatoria en una
+  transacción, `getMatch`, `listRecentMatches`, `listMatchPlayers`,
+  `saveProgress`) tiene variante SQLite y en memoria con el mismo contrato.
 - **`player.photo_uri`** admite un **data URI** (JPEG pequeño, recortado y
   comprimido) además de una URI de archivo local: así la foto viaja con la
   fila (copia, web con localStorage) y no se pierde si el archivo desaparece.

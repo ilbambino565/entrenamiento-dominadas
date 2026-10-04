@@ -16,3 +16,7 @@ export * from './squadRepository';
 export * from './squadMappers';
 export * from './inMemorySquadRepository';
 export * from './sqliteSquadRepository';
+export * from './matchRepository';
+export * from './matchMappers';
+export * from './inMemoryMatchRepository';
+export * from './sqliteMatchRepository';

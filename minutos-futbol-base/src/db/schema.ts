@@ -3,13 +3,14 @@
  *
  * - v1 (hito M1): la timeline (`match_event`) y `app_meta`.
  * - v2 (hito M3): equipo y plantilla (`team`, `player`).
+ * - v3 (hito M4): partidos y convocatoria (`match`, `match_player`).
  *
- * Las tablas de partido y las proyecciones llegarán como migraciones nuevas.
+ * Las proyecciones (`clock_segment`, `player_interval`) llegarán como migraciones nuevas.
  * Una migración publicada NUNCA se edita: una base ya migrada no volvería a
  * ejecutarla y quedaría distinta de una base nueva.
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export interface Migration {
   /** Consecutivo desde 1. Se escribe en `PRAGMA user_version` al aplicarla. */
@@ -127,6 +128,55 @@ export const MIGRATIONS: readonly Migration[] = [
       // La consulta de la plantilla: jugadores de un equipo en orden manual
       // (`listPlayers`: WHERE team_id = ? ORDER BY sort_order, created_at, id).
       'CREATE INDEX idx_player_team_order ON player (team_id, sort_order)',
+    ],
+  },
+  {
+    version: 3,
+    statements: [
+      // Partido. Columnas = `core/match.ts` en snake_case. Sin `season_id` ni
+      // `camera_settings` (docs/02): el MVP no tiene temporadas ni cámara
+      // integrada; llegarán en una migración cuando una pantalla las use.
+      // Formato, jugadores en campo, partes y duración se copian del equipo al
+      // crear y no cambian. `status`, `current_period`, `started_at` y
+      // `finished_at` son proyección de la timeline (docs/03).
+      `CREATE TABLE match (
+        id                 TEXT PRIMARY KEY,
+        team_id            TEXT NOT NULL REFERENCES team(id),
+        opponent           TEXT NOT NULL,
+        scheduled_at       INTEGER NOT NULL,
+        format             TEXT NOT NULL,
+        players_on_field   INTEGER NOT NULL,
+        periods_count      INTEGER NOT NULL DEFAULT 2,
+        period_duration_ms INTEGER NOT NULL,
+        home_away          TEXT,
+        competition        TEXT,
+        matchday           TEXT,
+        status             TEXT NOT NULL,
+        current_period     INTEGER NOT NULL DEFAULT 0,
+        started_at         INTEGER,
+        finished_at        INTEGER,
+        created_at         INTEGER NOT NULL,
+        updated_at         INTEGER NOT NULL,
+        deleted_at         INTEGER
+      )`,
+      // La lista de partidos recientes: por fecha, de más nuevo a más viejo.
+      'CREATE INDEX idx_match_scheduled ON match (scheduled_at)',
+      // Convocatoria. Sin `location`, `pos_x/y`, `was_starter`, `is_unavailable`
+      // ni `added_late`: son proyección del partido en curso y llegan con el
+      // paso que los usa. `UNIQUE (match_id, player_id)`: nadie convocado dos veces.
+      `CREATE TABLE match_player (
+        id                TEXT PRIMARY KEY,
+        match_id          TEXT NOT NULL REFERENCES match(id),
+        player_id         TEXT NOT NULL REFERENCES player(id),
+        shirt_number      INTEGER,
+        is_goalkeeper     INTEGER NOT NULL DEFAULT 0,
+        in_initial_lineup INTEGER NOT NULL DEFAULT 0,
+        bench_order       INTEGER,
+        created_at        INTEGER NOT NULL,
+        updated_at        INTEGER NOT NULL,
+        deleted_at        INTEGER,
+        UNIQUE (match_id, player_id)
+      )`,
     ],
   },
 ];
