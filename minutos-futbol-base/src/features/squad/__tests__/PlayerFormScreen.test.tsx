@@ -3,6 +3,7 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { SquadError } from '../../../app-services/squadService';
 import { LIGHT } from '../../../ui/theme';
 import { DELETE_EXPLANATION, PlayerFormScreen, parseShirtNumber } from '../PlayerFormScreen';
+import { WARNING_TEXT_LIGHT } from '../controls';
 import { pickPlayerPhoto } from '../photoPicker';
 import { createFakeSquadService, makePlayer, type FakeSquadOptions } from './fakeSquadService';
 
@@ -101,7 +102,7 @@ describe('PlayerFormScreen (P3) — alta', () => {
 
     const warning = screen.getByTestId('issue-shirtNumber-DUPLICATE_NUMBER');
     expect(warning).toHaveTextContent('Ya hay otro jugador con el dorsal 1');
-    expect(flat(warning.props.style)).toMatchObject({ color: LIGHT.colors.amber });
+    expect(flat(warning.props.style)).toMatchObject({ color: WARNING_TEXT_LIGHT });
 
     await fireEvent.press(screen.getByTestId('save'));
     await flush();
@@ -114,7 +115,7 @@ describe('PlayerFormScreen (P3) — alta', () => {
     const addPlayer = jest.spyOn(service, 'addPlayer');
     await fireEvent.changeText(screen.getByTestId('first-name'), 'Eva');
     await fireEvent.changeText(screen.getByTestId('shirt-number'), '100');
-    expect(screen.getByTestId('issue-shirtNumber-RANGE')).toHaveTextContent(/entre 0 y 99/);
+    expect(screen.getByTestId('issue-shirtNumber-RANGE')).toHaveTextContent(/entre 1 y 99/);
     await fireEvent.press(screen.getByTestId('save'));
     expect(addPlayer).not.toHaveBeenCalled();
 

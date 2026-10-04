@@ -58,12 +58,16 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
   const where = onField ? 'en el campo' : 'en el banquillo';
   const injured = unavailable ? ', lesionado' : '';
   const photo = player.photoUri;
+  // `number: 0` es "sin dorsal" (core/team.ts): se pinta la inicial y no se anuncia dorsal.
+  const hasNumber = player.number > 0;
+  const numberText = hasNumber ? String(player.number) : player.name.trim().charAt(0).toUpperCase() || '·';
+  const dorsal = hasNumber ? `dorsal ${player.number}` : 'sin dorsal';
 
   return (
     <Pressable
       onPress={() => props.onPress(player.id)}
       accessibilityRole="button"
-      accessibilityLabel={`${player.name}, dorsal ${player.number}, ${where}, ${formatClock(playedMs)} jugados${injured}`}
+      accessibilityLabel={`${player.name}, ${dorsal}, ${where}, ${formatClock(playedMs)} jugados${injured}`}
       accessibilityHint="Toca para seleccionar y luego toca el destino"
       accessibilityState={{ selected }}
       testID={props.testID ?? `token-${player.id}`}
@@ -84,9 +88,11 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
                 <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" testID={`token-photo-${player.id}`} />
               </View>
               {/* Con foto, el dorsal pasa a una chapa pequeña y el tiempo a una banda inferior oscura. */}
-              <View style={[styles.numberBadge, isGoalkeeper && { backgroundColor: colors.amber }]}>
-                <Text style={[styles.numberBadgeText, isGoalkeeper && { color: colors.onAmber }]}>{player.number}</Text>
-              </View>
+              {hasNumber ? (
+                <View style={[styles.numberBadge, isGoalkeeper && { backgroundColor: colors.amber }]}>
+                  <Text style={[styles.numberBadgeText, isGoalkeeper && { color: colors.onAmber }]}>{player.number}</Text>
+                </View>
+              ) : null}
               <View style={[styles.timeBand, { borderBottomLeftRadius: m.radius, borderBottomRightRadius: m.radius }]}>
                 <Text style={[styles.timeOnPhoto, TABULAR]} testID={`token-time-${player.id}`}>
                   {formatClock(playedMs)}
@@ -95,7 +101,7 @@ export const PlayerToken = memo(function PlayerToken(props: PlayerTokenProps) {
             </>
           ) : (
             <>
-              <Text style={[styles.number, { color: onFill, fontSize: m.numberFont, lineHeight: m.numberFont + 2 }]}>{player.number}</Text>
+              <Text style={[styles.number, { color: onFill, fontSize: m.numberFont, lineHeight: m.numberFont + 2 }]}>{numberText}</Text>
               <Text style={[styles.time, TABULAR, { color: onFill, fontSize: m.timeFont, lineHeight: m.timeFont + 2 }]} testID={`token-time-${player.id}`}>
                 {formatClock(playedMs)}
               </Text>

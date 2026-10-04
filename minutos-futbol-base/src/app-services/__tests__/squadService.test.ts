@@ -506,3 +506,42 @@ describe('createSquadService', () => {
     });
   });
 });
+
+describe('createSquadService — fotos (regresiones de la revisión)', () => {
+  const PHOTO = 'data:image/jpeg;base64,QUJD';
+  async function withPhoto() {
+    const ctx = setup();
+    await ctx.service.load();
+    await ctx.service.createTeam(TEAM_DRAFT);
+    const ana = await ctx.service.addPlayer(draft('Ana', { shirtNumber: 1, photoUri: PHOTO, photoConsent: true }));
+    return { ...ctx, ana };
+  }
+
+  it('updatePlayer de solo el dorsal conserva la foto y el consentimiento (en memoria y en el repositorio)', async () => {
+    const { service, repo, ana } = await withPhoto();
+    const updated = await service.updatePlayer(ana.id, { shirtNumber: 9 });
+    expect(updated).toMatchObject({ shirtNumber: 9, photoUri: PHOTO, photoConsent: true });
+    expect(await repo.getPlayer(ana.id)).toMatchObject({ shirtNumber: 9, photoUri: PHOTO, photoConsent: true });
+  });
+
+  it('removePlayer borra también la foto en el repositorio', async () => {
+    const { service, repo, ana } = await withPhoto();
+    await service.removePlayer(ana.id);
+    expect(await repo.getPlayer(ana.id)).toMatchObject({ firstName: DELETED_PLAYER_NAME, lastName: null, shirtNumber: null, photoUri: null, photoConsent: false });
+  });
+
+  it('matchSetup lleva la foto a la ficha del partido', async () => {
+    const { service, ana } = await withPhoto();
+    expect(service.matchSetup().players[ana.id]).toStrictEqual({ id: ana.id, name: 'Ana', number: 1, photoUri: PHOTO });
+  });
+
+  it('un nombre demasiado largo en el paquete se recorta a la regla de la ficha y después se puede editar', async () => {
+    const { service } = setup();
+    await service.load();
+    const pack = parseTeamPack({ teamName: 'CD Paquete', players: [{ id: 'larga', name: 'A'.repeat(45), number: 1 }] });
+    await service.importTeamPack(pack as TeamPack);
+    const player = service.getState().players[0];
+    expect(player?.firstName).toHaveLength(40);
+    await expect(service.updatePlayer(player!.id, { shirtNumber: 2 })).resolves.toMatchObject({ shirtNumber: 2 });
+  });
+});

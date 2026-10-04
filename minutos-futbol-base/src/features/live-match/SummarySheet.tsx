@@ -32,7 +32,7 @@ export function SummarySheet({ visible, onClose, onExit, engine, state, players,
   return (
     <Modal visible transparent={false} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.sheet, { backgroundColor: colors.background }]} testID="summary">
-        <Text style={[styles.title, { color: colors.text }]}>Resumen · vs {rival}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{rival ? `Resumen · vs ${rival}` : 'Resumen'}</Text>
         <Text style={[styles.subtitle, TABULAR, { color: colors.textMuted }]}>
           {state.config.periodsCount}×{minutes} · {formatClock(summary.clockMs)} real
           {state.endReason === 'SUSPENDED' ? ' · suspendido' : ''}
@@ -50,7 +50,7 @@ export function SummarySheet({ visible, onClose, onExit, engine, state, players,
             return (
               <View key={p.playerId} style={[styles.row, { borderColor: colors.surfaceRaised }]} testID={`summary-row-${p.playerId}`}>
                 <Text style={[styles.player, { color: colors.text }]}>
-                  #{info?.number ?? '?'} {info?.name ?? p.playerId}
+                  {info && info.number > 0 ? `#${info.number}` : '—'} {info?.name ?? p.playerId}
                 </Text>
                 <Text style={[styles.cell, TABULAR, { color: colors.text }]}>{formatClock(p.playedMs)}</Text>
                 <Text style={[styles.cellSmall, TABULAR, { color: colors.text }]}>{Math.round(p.share * 100)}%</Text>

@@ -103,7 +103,8 @@ function loadFromStorage(storage: KeyValueStorage, storageKey: string): SquadDat
     // recuperarlo de la copia. La clave original se sobrescribirá en la
     // primera escritura confirmada.
     const backupKey = `${storageKey}.corrupt`;
-    console.warn(`[squad] "${storageKey}" no se puede interpretar; se copia a "${backupKey}" y se arranca vacío`, error);
+    // Solo el tipo del error: el mensaje de JSON.parse incluye un trozo del texto (podría ser un apellido).
+    console.warn(`[squad] "${storageKey}" no se puede interpretar (${error instanceof Error ? error.name : 'error'}); se copia a "${backupKey}" y se arranca vacío`);
     try {
       storage.setItem(backupKey, raw);
     } catch (copyError) {

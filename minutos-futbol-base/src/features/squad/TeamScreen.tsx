@@ -1,10 +1,11 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SquadService } from '../../app-services/squadService';
 import { formationsFor, isValidFormation } from '../../core/formations';
 import { GAME_FORMATS, type GameFormatId } from '../../core/formats';
-import type { DisplayNameMode, Team, TeamDraft } from '../../core/team';
+import { displayName } from '../../core/squad';
+import type { DisplayNameMode, Player, Team, TeamDraft } from '../../core/team';
 import { useTheme } from '../../ui/theme';
 import { BigButton, Chip, ChipRow, FormField } from './controls';
 import { errorMessage, useSquadScreenState } from './useSquadState';
@@ -58,7 +59,7 @@ export function TeamScreen({ service }: TeamScreenProps) {
     );
   }
 
-  return <TeamForm key={state.team.id} service={service} team={state.team} />;
+  return <TeamForm key={state.team.id} service={service} team={state.team} players={state.players} />;
 }
 
 /** Texto del campo Minutos → ms por parte; null si no es un entero entre 1 y 90. */
@@ -69,7 +70,7 @@ export function parsePeriodMinutes(text: string): number | null {
   return minutes >= PERIOD_MINUTES_MIN && minutes <= PERIOD_MINUTES_MAX ? minutes * MINUTE_MS : null;
 }
 
-function TeamForm({ service, team }: { service: SquadService; team: Team }) {
+function TeamForm({ service, team, players }: { service: SquadService; team: Team; players: readonly Player[] }) {
   const { colors } = useTheme();
   const [name, setName] = useState(team.name);
   const [category, setCategory] = useState(team.category ?? '');
@@ -116,6 +117,14 @@ function TeamForm({ service, team }: { service: SquadService; team: Team }) {
     }
     update(patch);
   }, [name, category, minutes, team, update]);
+
+  // Al cambiar de pestaña la pantalla se desmonta sin `onBlur`: lo escrito se guarda igualmente.
+  const latestSave = useRef(saveTexts);
+  latestSave.current = saveTexts;
+  useEffect(() => () => latestSave.current(), []);
+
+  const sample = players.find((p) => p.isActive) ?? players[0] ?? null;
+  const namePreview = displayName(sample ?? { firstName: 'Ana', lastName: 'García' }, team.displayNameMode);
 
   const chooseFormat = useCallback(
     (defaultFormat: GameFormatId) => {
@@ -168,12 +177,15 @@ function TeamForm({ service, team }: { service: SquadService; team: Team }) {
           </View>
         </Section>
 
-        <Section label="Mostrar nombres">
+        <Section label="Nombres en el partido">
           <ChipRow>
             {NAME_MODES.map(({ mode, label }) => (
               <Chip key={mode} label={label} selected={team.displayNameMode === mode} onPress={() => update({ displayNameMode: mode })} testID={`names-${mode}`} disabled={saving} />
             ))}
           </ChipRow>
+          <Text style={[styles.preview, { color: colors.textMuted }]} testID="names-preview">
+            En las fichas del partido se verá: {namePreview}
+          </Text>
         </Section>
 
         {error ? (
@@ -213,4 +225,5 @@ const styles = StyleSheet.create({
   times: { fontSize: 22, fontWeight: '700', marginBottom: 28 },
   minutesField: { flex: 1 },
   error: { marginBottom: 12, fontSize: 15, fontWeight: '600' },
+  preview: { marginTop: 8, fontSize: 14 },
 });

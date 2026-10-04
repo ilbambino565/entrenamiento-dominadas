@@ -172,7 +172,7 @@ export function ClockBar({ engine, state, now, players, rival, teamName, notify,
           <View style={styles.teamRow}>
             <Image source={crest} style={styles.crest} accessibilityIgnoresInvertColors />
             <Text style={[styles.rival, { color: colors.text }]} numberOfLines={1} testID="team-line">
-              {teamName} · vs {rival}
+              {rival ? `${teamName} · vs ${rival}` : teamName}
             </Text>
           </View>
           <View style={styles.clockRow}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SquadError, type SquadService } from '../../app-services/squadService';
 import {
@@ -15,7 +15,7 @@ import {
 } from '../../core/squad';
 import type { Player, PlayerDraft } from '../../core/team';
 import { SIZES, useTheme } from '../../ui/theme';
-import { BigButton, FormField, IssueText, LabelledRow, PRIMARY_HEIGHT, SECONDARY_HEIGHT } from './controls';
+import { BigButton, FormField, IssueText, PRIMARY_HEIGHT, SECONDARY_HEIGHT, ToggleRow } from './controls';
 import { pickPlayerPhoto } from './photoPicker';
 import { PlayerAvatar } from './PlayerAvatar';
 import { errorMessage, useSquadScreenState } from './useSquadState';
@@ -31,12 +31,15 @@ import { errorMessage, useSquadScreenState } from './useSquadState';
  * dos pasos dentro de la misma pantalla (sin diálogo nativo, que en web y en
  * los tests se comporta distinto) y explica qué se borra y qué se conserva.
  */
+/** Cómo se cerró la ficha: la lista lo usa para llevar la vista al jugador nuevo. */
+export type PlayerFormResult = 'saved' | 'deleted' | 'cancelled';
+
 export interface PlayerFormScreenProps {
   service: SquadService;
   /** Sin id (o null) es un alta. */
   playerId?: string | null;
   /** Volver: tras guardar, tras eliminar o con ← sin guardar. */
-  onDone: () => void;
+  onDone: (result: PlayerFormResult) => void;
 }
 
 export const PHOTO_BUTTON_SIZE = 96;
@@ -50,7 +53,7 @@ export function PlayerFormScreen({ service, playerId = null, onDone }: PlayerFor
   if (playerId && !player) {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
-        <Header title="Jugador" onBack={onDone} />
+        <Header title="Jugador" onBack={() => onDone('cancelled')} />
         <View style={styles.center}>
           {state.status === 'loading' ? (
             <ActivityIndicator color={colors.accent} testID="player-loading" />
@@ -86,7 +89,7 @@ interface PlayerFormProps {
   service: SquadService;
   player: Player | null;
   others: readonly Player[];
-  onDone: () => void;
+  onDone: (result: PlayerFormResult) => void;
 }
 
 /** Texto del campo Dorsal → número: vacío = sin dorsal; no numérico = NaN (error local). */
@@ -118,6 +121,8 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const lastNameRef = useRef<TextInput>(null);
+  const shirtRef = useRef<TextInput>(null);
   const alive = useRef(true);
   useEffect(
     () => () => {
@@ -169,7 +174,7 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
       const normalized = normalizePlayerDraft(draft);
       if (player) await service.updatePlayer(player.id, normalized);
       else await service.addPlayer(normalized);
-      onDone();
+      onDone('saved');
     } catch (error: unknown) {
       if (!alive.current) return;
       setSubmitError(error instanceof SquadError && error.issues.length > 0 ? error.issues.map((i) => i.message).join('\n') : errorMessage(error, 'No se pudo guardar'));
@@ -184,7 +189,7 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
     setSubmitError(null);
     try {
       await service.removePlayer(player.id);
-      onDone();
+      onDone('deleted');
     } catch (error: unknown) {
       if (alive.current) setSubmitError(errorMessage(error, 'No se pudo eliminar'));
     } finally {
@@ -196,7 +201,7 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Header title={player ? 'Jugador' : 'Nuevo jugador'} onBack={onDone} />
+      <Header title={player ? 'Jugador' : 'Nuevo jugador'} onBack={() => onDone('cancelled')} />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.photoBlock}>
@@ -258,6 +263,9 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
               testID="first-name"
               maxLength={FIRST_NAME_MAX_LENGTH + 10}
               issues={visibleIssues('firstName')}
+              autoFocus={!player}
+              returnKeyType="next"
+              onSubmitEditing={() => lastNameRef.current?.focus()}
             />
             <FormField
               label="Apellidos"
@@ -270,6 +278,9 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
               testID="last-name"
               maxLength={LAST_NAME_MAX_LENGTH + 10}
               issues={visibleIssues('lastName')}
+              inputRef={lastNameRef}
+              returnKeyType="next"
+              onSubmitEditing={() => shirtRef.current?.focus()}
             />
             <FormField
               label="Dorsal"
@@ -285,22 +296,13 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
               maxLength={3}
               autoCapitalize="none"
               issues={visibleIssues('shirtNumber')}
+              inputRef={shirtRef}
+              returnKeyType="done"
+              onSubmitEditing={() => void save()}
             />
-            <LabelledRow label="Portero">
-              <Switch value={isGoalkeeper} onValueChange={setGoalkeeper} accessibilityLabel="Portero" testID="goalkeeper" trackColor={{ true: colors.amber }} />
-            </LabelledRow>
-            <LabelledRow label="Activo">
-              <Switch value={isActive} onValueChange={setActive} accessibilityLabel="Activo" testID="active" trackColor={{ true: colors.accent }} />
-            </LabelledRow>
+            <ToggleRow label="Portero" value={isGoalkeeper} onValueChange={setGoalkeeper} testID="goalkeeper" trackColor={colors.amber} />
+            <ToggleRow label="Activo" value={isActive} onValueChange={setActive} testID="active" />
           </View>
-
-          {submitError ? (
-            <Text accessibilityRole="alert" style={[styles.submitError, { color: colors.danger }]} testID="submit-error">
-              {submitError}
-            </Text>
-          ) : null}
-
-          <BigButton label="GUARDAR" onPress={() => void save()} disabled={busy} testID="save" />
 
           {player ? (
             <View style={styles.deleteBlock}>
@@ -320,6 +322,15 @@ function PlayerForm({ service, player, others, onDone }: PlayerFormProps) {
             </View>
           ) : null}
         </ScrollView>
+        {/* GUARDAR fijo bajo el formulario: siempre a la vista, también con el teclado abierto. */}
+        <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.surfaceRaised }]}>
+          {submitError ? (
+            <Text accessibilityRole="alert" style={[styles.submitError, { color: colors.danger }]} testID="submit-error">
+              {submitError}
+            </Text>
+          ) : null}
+          <BigButton label="GUARDAR" onPress={() => void save()} disabled={busy} testID="save" />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -334,7 +345,8 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 22, fontWeight: '800' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   centerText: { fontSize: 17, fontWeight: '600', textAlign: 'center' },
-  content: { paddingHorizontal: 16, paddingBottom: 32 },
+  content: { paddingHorizontal: 16, paddingBottom: 16 },
+  footer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, borderTopWidth: 1 },
   photoBlock: { alignItems: 'center', marginTop: 8, marginBottom: 4 },
   photoButton: { width: PHOTO_BUTTON_SIZE, height: PHOTO_BUTTON_SIZE, borderRadius: PHOTO_BUTTON_SIZE / 2, overflow: 'hidden' },
   photo: { width: PHOTO_BUTTON_SIZE, height: PHOTO_BUTTON_SIZE, borderRadius: PHOTO_BUTTON_SIZE / 2 },
@@ -346,7 +358,7 @@ const styles = StyleSheet.create({
   checkboxLabel: { flex: 1, fontSize: 16, fontWeight: '600' },
   fields: { marginTop: 12 },
   submitError: { marginBottom: 12, fontSize: 15, fontWeight: '600' },
-  deleteBlock: { marginTop: 28, alignItems: 'center' },
+  deleteBlock: { marginTop: 8, alignItems: 'center' },
   deleteConfirm: { alignSelf: 'stretch', borderWidth: 2, borderRadius: SIZES.radius, padding: 16, gap: 12 },
   deleteExplanation: { fontSize: 15, lineHeight: 20, textAlign: 'center' },
   textButton: { minHeight: SECONDARY_HEIGHT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },

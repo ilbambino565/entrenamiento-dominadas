@@ -87,8 +87,8 @@ export function MatchesHome({ service, onPlay }: MatchesHomeProps) {
           </Text>
         )}
         <Text style={[styles.note, { color: colors.textMuted }]} testID="play-note">
-          El partido se juega con los {playersOnField} primeros de la plantilla en {formation}; los partidos guardados y la
-          convocatoria llegan en el siguiente paso.
+          Juegan los {playersOnField} primeros activos de la plantilla, con el portero en su sitio (dibujo {formation}). Crear partidos
+          con rival, fecha y convocatoria llegará más adelante.
         </Text>
       </View>
     </SafeAreaView>

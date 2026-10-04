@@ -179,9 +179,7 @@ describe('AppShell — partido con la plantilla real', () => {
     expect(flat(play.props.style).minHeight).toBeGreaterThanOrEqual(64);
     expect(play.props.accessibilityState).toMatchObject({ disabled: false });
     expect(screen.queryByTestId('play-hint')).toBeNull();
-    expect(screen.getByTestId('play-note')).toHaveTextContent(
-      'El partido se juega con los 7 primeros de la plantilla en 2-3-1; los partidos guardados y la convocatoria llegan en el siguiente paso.',
-    );
+    expect(screen.getByTestId('play-note')).toHaveTextContent(/Juegan los 7 primeros activos de la plantilla, con el portero en su sitio \(dibujo 2-3-1\)\./);
 
     await fireEvent.press(play);
     const pitch = await screen.findByTestId('pitch');
@@ -243,7 +241,7 @@ describe('AppShell — siembra con paquete de equipo', () => {
     expect(screen.queryByTestId('first-run-name')).toBeNull();
     expect(service.getState().players.map((p) => p.firstName)).toEqual(['Ana', 'Bea', 'Cris', 'Dani', 'Eva', 'Fran', 'Gael', 'Hugo', 'Iris']);
     expect(service.getState().team?.defaultFormation).toBe('3-1-2');
-    expect(screen.getByTestId('play-note')).toHaveTextContent(/en 3-1-2;/);
+    expect(screen.getByTestId('play-note')).toHaveTextContent(/dibujo 3-1-2\)/);
 
     await fireEvent.press(screen.getByTestId('play-match'));
     const pitch = await screen.findByTestId('pitch');
@@ -279,5 +277,53 @@ describe('AppShell — siembra con paquete de equipo', () => {
     const screen = await renderShell(service);
     expect(await screen.findByTestId('home-team-name')).toHaveTextContent('CD Prueba');
     expect(service.getState().players.map((p) => p.firstName)).toEqual(['Ana']);
+  });
+});
+
+describe('AppShell — edición desde la lista y segundo partido', () => {
+  it('tocar una fila abre la ficha precargada; GUARDAR el dorsal lo muestra en la lista', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea'], 'Ana');
+    const screen = await renderShell(service);
+    await fireEvent.press(await screen.findByTestId('tab-squad'));
+    await fireEvent.press(await screen.findByTestId(`player-row-${idOf(service, 'Bea')}`));
+    expect(await screen.findByTestId('player-form-title')).toHaveTextContent('Jugador');
+    expect(screen.getByTestId('first-name').props.value).toBe('Bea');
+    await fireEvent.changeText(screen.getByTestId('shirt-number'), '9');
+    await fireEvent.press(screen.getByTestId('save'));
+    expect(await screen.findByTestId('squad-title')).toHaveTextContent('Plantilla (2)');
+    expect(screen.getByTestId(`player-number-${idOf(service, 'Bea')}`)).toHaveTextContent('#9');
+    expect(service.getState().players.find((p) => p.firstName === 'Bea')?.shirtNumber).toBe(9);
+  });
+
+  it('en modo Ordenar tocar la fila (o su flecha deshabilitada) no abre la ficha', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea'], 'Ana');
+    const screen = await renderShell(service);
+    await fireEvent.press(await screen.findByTestId('tab-squad'));
+    await fireEvent.press(await screen.findByTestId('toggle-reorder'));
+    await fireEvent.press(screen.getByTestId(`move-up-${idOf(service, 'Ana')}`));
+    await fireEvent.press(screen.getByTestId(`player-row-${idOf(service, 'Ana')}`));
+    expect(screen.queryByTestId('player-form-title')).toBeNull();
+    expect(screen.getByTestId('squad-title')).toHaveTextContent('Plantilla (2)');
+  });
+
+  it('un segundo partido arranca de cero con la plantilla actual', async () => {
+    const service = makeService();
+    await seedTeam(service, ['Ana', 'Bea', 'Cris'], 'Ana');
+    const screen = await renderShell(service);
+    await fireEvent.press(await screen.findByTestId('play-match'));
+    await screen.findByTestId('pitch');
+    await fireEvent.press(screen.getByTestId('menu-button'));
+    await fireEvent(screen.getByTestId('exit-button'), 'longPress');
+    await screen.findByTestId('play-match');
+    await act(async () => {
+      await service.addPlayer(draft('Dani', { shirtNumber: 4 }));
+    });
+    await fireEvent.press(screen.getByTestId('play-match'));
+    const pitch = await screen.findByTestId('pitch');
+    expect(within(pitch).getByTestId(`token-${idOf(service, 'Dani')}`)).toBeTruthy();
+    expect(screen.getByTestId('main-button')).toHaveTextContent('INICIAR');
+    expect(screen.getByTestId('team-line')).toHaveTextContent(/^CD Prueba$/);
   });
 });

@@ -100,8 +100,9 @@ describe('validatePlayerDraft', () => {
     ]);
   });
 
-  it('dorsal: 0 y 99 valen; 100, -1 y 7,5 no; NaN cuenta como vacío', () => {
-    expect(validatePlayerDraft(draft({ shirtNumber: 0 }), [])).toEqual([]);
+  it('dorsal: 1 y 99 valen; 0, 100, -1 y 7,5 no (el 0 se reserva para "sin dorsal" en la ficha del partido); NaN cuenta como vacío', () => {
+    expect(validatePlayerDraft(draft({ shirtNumber: 1 }), [])).toEqual([]);
+    expect(validatePlayerDraft(draft({ shirtNumber: 0 }), [])).toMatchObject([{ field: 'shirtNumber', code: 'RANGE', level: 'error' }]);
     expect(validatePlayerDraft(draft({ shirtNumber: 99 }), [])).toEqual([]);
     for (const bad of [100, -1, 7.5]) {
       const issues = validatePlayerDraft(draft({ shirtNumber: bad }), []);

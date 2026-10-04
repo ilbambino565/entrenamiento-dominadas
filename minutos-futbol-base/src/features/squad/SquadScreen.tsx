@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SquadService } from '../../app-services/squadService';
@@ -23,12 +23,24 @@ export interface SquadScreenProps {
   service: SquadService;
   onAddPlayer: () => void;
   onEditPlayer: (id: string) => void;
+  /** Cambia tras cada alta: la lista baja hasta el final para enseñar al jugador nuevo. */
+  scrollToEndKey?: number;
 }
 
-export function SquadScreen({ service, onAddPlayer, onEditPlayer }: SquadScreenProps) {
+export function SquadScreen({ service, onAddPlayer, onEditPlayer, scrollToEndKey = 0 }: SquadScreenProps) {
   const { colors } = useTheme();
   const state = useSquadScreenState(service);
   const [reordering, setReordering] = useState(false);
+  const listRef = useRef<FlatList<Player>>(null);
+  const pendingScroll = useRef(false);
+  useEffect(() => {
+    if (scrollToEndKey > 0) pendingScroll.current = true;
+  }, [scrollToEndKey]);
+  const onContentSizeChange = useCallback(() => {
+    if (!pendingScroll.current) return;
+    pendingScroll.current = false;
+    listRef.current?.scrollToEnd({ animated: true });
+  }, []);
   const [actionError, setActionError] = useState<string | null>(null);
   const players = state.players;
 
@@ -49,7 +61,7 @@ export function SquadScreen({ service, onAddPlayer, onEditPlayer }: SquadScreenP
         reordering={reordering}
         isFirst={index === 0}
         isLast={index === players.length - 1}
-        onPress={onEditPlayer}
+        onEdit={onEditPlayer}
         onMove={move}
       />
     ),
@@ -104,9 +116,11 @@ export function SquadScreen({ service, onAddPlayer, onEditPlayer }: SquadScreenP
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           data={players}
           keyExtractor={(p) => p.id}
           renderItem={renderRow}
+          onContentSizeChange={onContentSizeChange}
           extraData={reordering}
           testID="player-list"
           contentContainerStyle={styles.listContent}
@@ -127,11 +141,11 @@ interface PlayerRowProps {
   reordering: boolean;
   isFirst: boolean;
   isLast: boolean;
-  onPress: (id: string) => void;
+  onEdit: (id: string) => void;
   onMove: (id: string, direction: -1 | 1) => void;
 }
 
-function PlayerRow({ player, reordering, isFirst, isLast, onPress, onMove }: PlayerRowProps) {
+function PlayerRow({ player, reordering, isFirst, isLast, onEdit, onMove }: PlayerRowProps) {
   const { colors } = useTheme();
   const name = displayName(player, 'full');
   const number = player.shirtNumber !== null ? `#${player.shirtNumber}` : '—';
@@ -146,10 +160,11 @@ function PlayerRow({ player, reordering, isFirst, isLast, onPress, onMove }: Pla
 
   return (
     <Pressable
-      onPress={() => onPress(player.id)}
+      // En modo Ordenar la fila no navega: un toque en una flecha deshabilitada no debe abrir la ficha.
+      onPress={reordering ? undefined : () => onEdit(player.id)}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityHint="Toca para editar la ficha"
+      accessibilityHint={reordering ? 'Usa las flechas para cambiar el orden' : 'Toca para editar la ficha'}
       testID={`player-row-${player.id}`}
       style={[styles.row, { backgroundColor: colors.surface }, !player.isActive && styles.inactiveRow]}
     >

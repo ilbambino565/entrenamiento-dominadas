@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import type { SquadService } from '../../app-services/squadService';
 import { readTeamPack } from '../../core/teamPack';
 import { useSquadState } from '../../state';
 import { useTheme } from '../../ui/theme';
 import { LiveMatchScreen } from '../live-match';
 import { PlayerFormScreen, SquadScreen, TeamScreen } from '../squad';
+import type { PlayerFormResult } from '../squad/PlayerFormScreen';
 import { BootScreen } from './BootScreen';
 import { FirstRunScreen } from './FirstRunScreen';
 import { MatchesHome } from './MatchesHome';
@@ -42,14 +43,16 @@ const TABS_ROUTE: Route = { kind: 'tabs' };
  * el equipo a mano igualmente.
  */
 export async function bootSquad(service: SquadService): Promise<void> {
-  let team: boolean;
+  let seeded: boolean;
   try {
-    team = (await service.load()).team !== null;
+    const loaded = await service.load();
+    // Equipo sin jugadores (p. ej. una siembra que falló a medias) también se siembra.
+    seeded = loaded.team !== null && loaded.players.length > 0;
   } catch (error) {
     console.warn('[AppShell] no se pudo cargar el equipo', error);
     return;
   }
-  if (team) return;
+  if (seeded) return;
   const pack = readTeamPack();
   if (!pack) return;
   try {
@@ -66,6 +69,25 @@ export function AppShell({ service, now = Date.now }: AppShellProps) {
   const [attempt, setAttempt] = useState(0);
   const [tab, setTab] = useState<Tab>('matches');
   const [route, setRoute] = useState<Route>(TABS_ROUTE);
+  const [scrollToEndKey, setScrollToEndKey] = useState(0);
+
+  // Botón/gesto atrás de Android: cierra la ficha, vuelve a Partidos y nunca
+  // saca de un partido (se sale con SALIR, mantener pulsado). En iOS y web no hace nada.
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (route.kind === 'player') {
+        setRoute(TABS_ROUTE);
+        return true;
+      }
+      if (route.kind === 'match') return true;
+      if (tab !== 'matches') {
+        setTab('matches');
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [route, tab]);
 
   useEffect(() => {
     let alive = true;
@@ -84,7 +106,10 @@ export function AppShell({ service, now = Date.now }: AppShellProps) {
   const openSquadTab = useCallback(() => setTab('squad'), []);
   const addPlayer = useCallback(() => setRoute({ kind: 'player', playerId: null }), []);
   const editPlayer = useCallback((id: string) => setRoute({ kind: 'player', playerId: id }), []);
-  const closeRoute = useCallback(() => setRoute(TABS_ROUTE), []);
+  const closeForm = useCallback((result: PlayerFormResult, created: boolean) => {
+    if (result === 'saved' && created) setScrollToEndKey((k) => k + 1);
+    setRoute(TABS_ROUTE);
+  }, []);
 
   const play = useCallback(() => {
     try {
@@ -111,20 +136,23 @@ export function AppShell({ service, now = Date.now }: AppShellProps) {
         session={match.session}
         players={match.setup.players}
         teamName={match.setup.teamName}
-        rival="Rival"
+        rival=""
         lineup={match.setup.lineup}
         bench={match.setup.bench}
         onExit={() => leaveMatch(match)}
       />
     );
   }
-  if (route.kind === 'player') return <PlayerFormScreen service={service} playerId={route.playerId} onDone={closeRoute} />;
+  if (route.kind === 'player') {
+    const created = route.playerId === null;
+    return <PlayerFormScreen service={service} playerId={route.playerId} onDone={(result) => closeForm(result, created)} />;
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
         {tab === 'matches' ? <MatchesHome service={service} onPlay={play} /> : null}
-        {tab === 'squad' ? <SquadScreen service={service} onAddPlayer={addPlayer} onEditPlayer={editPlayer} /> : null}
+        {tab === 'squad' ? <SquadScreen service={service} onAddPlayer={addPlayer} onEditPlayer={editPlayer} scrollToEndKey={scrollToEndKey} /> : null}
         {tab === 'team' ? <TeamScreen service={service} /> : null}
       </View>
       <TabBar current={tab} onSelect={setTab} />

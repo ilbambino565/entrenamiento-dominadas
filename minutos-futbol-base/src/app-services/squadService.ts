@@ -1,6 +1,7 @@
 import { GAME_FORMATS, type LineupEntry, type MatchConfig } from '../core';
 import type { Player, PlayerDraft, PlayerInfo, Team, TeamDraft } from '../core/team';
 import {
+  FIRST_NAME_MAX_LENGTH,
   SHIRT_NUMBER_MAX,
   activePlayers,
   anonymizePlayer,
@@ -190,7 +191,8 @@ function orderPackPlayers(pack: TeamPack): PlayerInfo[] {
 
 function packPlayerDraft(info: PlayerInfo): PlayerDraft {
   return normalizePlayerDraft({
-    firstName: info.name,
+    // Misma regla que la ficha tecleada: un nombre más largo bloquearía después cualquier edición.
+    firstName: info.name.trim().slice(0, FIRST_NAME_MAX_LENGTH),
     lastName: null,
     shirtNumber: packShirtNumber(info.number),
     isGoalkeeper: info.isGoalkeeper === true,

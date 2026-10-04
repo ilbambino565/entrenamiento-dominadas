@@ -19,7 +19,7 @@ import type { DisplayNameMode, Player, PlayerDraft, PlayerInfo, Team } from './t
 
 export const FIRST_NAME_MAX_LENGTH = 40;
 export const LAST_NAME_MAX_LENGTH = 60;
-export const SHIRT_NUMBER_MIN = 0;
+export const SHIRT_NUMBER_MIN = 1;
 export const SHIRT_NUMBER_MAX = 99;
 
 /** Nombre que recibe un jugador eliminado: su histórico sigue en la timeline, sin datos personales. */
