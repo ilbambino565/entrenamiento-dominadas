@@ -37,6 +37,12 @@
           "microphonePermission": false
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2fbcd79e-bb2f-4c66-be02-870d721f8cc1"
+      }
+    },
+    "owner": "tonyheredia"
   }
 }
