@@ -50,4 +50,16 @@ describe('openPersistence (web)', () => {
     await blocked.events.append(makeEvent(1));
     expect(await blocked.events.lastSeq('match-f7-1')).toBe(1);
   });
+
+  it('si localStorage existe pero no deja escribir (privado, cuota), se queda en memoria y la plantilla sigue cargando', async () => {
+    const readOnly = createFakeStorage();
+    readOnly.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+    install(readOnly);
+    expect(webStorage()).toBeNull();
+    const memory = await openPersistence();
+    await memory.squad.saveTeam(makeTeam());
+    expect(await memory.squad.getTeam()).toEqual(makeTeam());
+  });
 });

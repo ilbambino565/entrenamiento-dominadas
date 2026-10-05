@@ -19,9 +19,22 @@ import type { Persistence } from './persistence';
  * sin red: la cuota de `localStorage` (~5 MB) la comen sobre todo las fotos de
  * la plantilla.
  */
+const PROBE_KEY = 'minutos-futbol-base.probe';
+
+/**
+ * `localStorage` solo vale si además deja ESCRIBIR: en navegación privada de
+ * algunos navegadores, con la cuota agotada o con los datos de sitio
+ * bloqueados, el objeto existe pero `setItem` lanza. Si se descubriera en la
+ * primera escritura, la siembra del paquete fallaría y el entrenador vería el
+ * primer arranque vacío en vez de su plantilla; mejor saberlo ahora y
+ * quedarse en memoria.
+ */
 export function webStorage(): KeyValueStorage | null {
   try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
+    if (typeof localStorage === 'undefined') return null;
+    localStorage.setItem(PROBE_KEY, '1');
+    if (typeof localStorage.removeItem === 'function') localStorage.removeItem(PROBE_KEY);
+    return localStorage;
   } catch {
     return null;
   }
