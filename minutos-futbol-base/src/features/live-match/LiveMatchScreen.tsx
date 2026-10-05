@@ -1,3 +1,4 @@
+import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -48,6 +49,8 @@ export function LiveMatchScreen({
 }: LiveMatchScreenProps) {
   const { engine } = session;
   const { colors } = useTheme();
+  // La pantalla no se apaga mientras el partido está en pantalla (en web, Wake Lock si el navegador lo permite).
+  useKeepAwake();
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);

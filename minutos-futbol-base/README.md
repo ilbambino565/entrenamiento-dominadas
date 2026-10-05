@@ -51,3 +51,23 @@ npx expo start            # app (pestañas Partidos · Plantilla · Equipo y par
 
 React Native + Expo + TypeScript · Expo Router · expo-sqlite (WAL, migraciones
 SQL) · Zustand · react-native-gesture-handler + Reanimated · Supabase (fase 3).
+
+## Instalar en una tablet Android (APK, sin Play Store)
+
+La app se compila con EAS Build (cuenta gratuita en expo.dev). Hay que hacerlo
+desde un ordenador con el repositorio clonado, en la rama de trabajo:
+
+```bash
+cd minutos-futbol-base
+npm install
+npm install -g eas-cli
+eas login                      # cuenta de expo.dev
+eas init                       # vincula el proyecto (escribe extra.eas.projectId en app.json)
+eas build -p android --profile preview
+```
+
+Al terminar, EAS muestra un enlace y un QR con el `.apk`. En la tablet: abrir el
+enlace, descargar, permitir "instalar apps desconocidas" para el navegador si lo
+pide, e instalar. La plantilla y los partidos quedan en la base SQLite de la
+tablet; la pantalla se mantiene encendida mientras el partido está en pantalla.
+Para iPad hace falta la cuenta de desarrollador de Apple (TestFlight).

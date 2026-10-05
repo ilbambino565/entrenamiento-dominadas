@@ -25,3 +25,10 @@ jest.mock('react-native-reanimated', () => {
 // Sin el mock, SafeAreaProvider no pinta a sus hijos hasta que la vista nativa
 // informa de los márgenes, cosa que en Jest nunca ocurre.
 jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+
+// Mantener la pantalla encendida es un módulo nativo: en Jest no hace nada.
+jest.mock('expo-keep-awake', () => ({
+  useKeepAwake: () => undefined,
+  activateKeepAwakeAsync: async () => undefined,
+  deactivateKeepAwake: async () => undefined,
+}));
